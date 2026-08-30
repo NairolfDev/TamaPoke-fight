@@ -334,6 +334,27 @@ runaway-ready state) · `WIPE` (factory reset → new game) · `BEEP` (audio tes
 
 To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in `pet.h`.
 
+## Automated tests (no board needed)
+
+The game logic (`pet.cpp`, `i18n.cpp`, `dex.h`) also builds and runs on your
+computer against small Arduino shims, with a fake clock and a fake `random()`,
+so the whole battery is deterministic and finishes in under a second:
+
+```bash
+./test/run_tests.sh           # firmware logic + tools
+./test/run_tests.sh --asan    # plus AddressSanitizer + UBSan
+```
+
+It covers eggs and the starter pick, the per-minute stat tick, sleep, care
+mistakes, evolution (Eevee's branch included), battle stats and training,
+streak/bond/medals, the three endings, offline progression and NVS save/load;
+the Pokédex table (no evolution loops, every species reachable, UI buffers);
+the six languages (complete, ASCII-only, matching `%u`/`%s` per call site); and
+that `dex.h` still matches what `tools/gen_dex.py` generates.
+
+See [`test/README.md`](test/README.md) for details. Anything that needs the
+board — display, touch, audio, SD, RTC — is not covered.
+
 ## Roadmap
 
 - **Wild encounters / battle** — designed (see project memory): resolution by
