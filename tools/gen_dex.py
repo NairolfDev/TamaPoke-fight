@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from dex_data import DEX, TYPE_ACCENTS, CLASSIC, RARE, LEGENDARY
 from dex_stats import BASE_STATS
 from dex_names import LOCAL_NAMES
+from type_data import SPECIES_TYPES
+from type_chart import ACCENTS as TYPE_ACCENT_EN
 
 
 def rgb565(hexcol):
@@ -32,7 +34,7 @@ BIOME_OVERRIDE = {138: 1, 139: 1, 140: 1, 141: 1}  # Omanyte, Omastar, Kabuto, K
 
 def main():
     out = []
-    out.append("#pragma once\n#include <stdint.h>\n#include \"i18n.h\"  // gLang\n\n")
+    out.append("#pragma once\n#include <stdint.h>\n#include \"i18n.h\"  // gLang\n#include \"types.h\"\n\n")
     out.append("// GENERADO por tools/gen_dex.py desde tools/dex_data.py - no editar\n\n")
     out.append("#define DEX_COUNT 151\n")
     out.append("#define DEX_EEVEE 133  // rama al azar: 134/135/136\n\n")
@@ -47,13 +49,14 @@ def main():
         "  uint16_t accent;      // color RGB565 del tipo para la UI\n"
         "  uint8_t bHp, bAtk, bDef, bSpe;  // base stats reales de gen 1\n"
         "  uint8_t biome;        // 0 pradera 1 playa 2 bosque 3 volcan 4 montana 5 nieve\n"
+        "  uint8_t type1, type2;  // tipos reales de gen 1 (type2 = T_NONE si solo uno)\n"
         "};\n\n")
     # formas base = las que no son evolucion de nadie (las ramas de Eevee si lo son)
     evolved = {evo for *_, evo, _lvl in [(d[4], d[5]) for d in DEX] for evo in [_[0] for _ in [(d[4],) for d in DEX]]}
     evolved = {d[4] for d in DEX if d[4]} | {135, 136}
     rarities = []
     out.append("static const DexEntry DEX_TBL[DEX_COUNT + 1] = {\n")
-    out.append('  { "?", 0, 0, 0, 0x2946, 50, 50, 50, 50, 0 },  // 0: sin usar\n')
+    out.append('  { "?", 0, 0, 0, 0x2946, 50, 50, 50, 50, 0, T_NORMAL, T_NONE },  // 0: sin usar\n')
     for num, slug, display, typ, evo, lvl in DEX:
         acc = rgb565(TYPE_ACCENTS[typ])
         if num in evolved:
@@ -67,7 +70,10 @@ def main():
         rarities.append(rar)
         hp, atk, df, spe = BASE_STATS[num]
         bio = BIOME_OVERRIDE.get(num, TYPE_BIOME[typ])
-        out.append(f'  {{ "{display}", {evo}, {lvl}, {rar}, 0x{acc:04X}, {hp}, {atk}, {df}, {spe}, {bio} }},  // {num} {typ}\n')
+        t1, t2 = SPECIES_TYPES[num]
+        acc = rgb565(TYPE_ACCENT_EN[t1])  # el acento sale del tipo real
+        c2 = f'T_{t2.upper()}' if t2 else 'T_NONE'
+        out.append(f'  {{ "{display}", {evo}, {lvl}, {rar}, 0x{acc:04X}, {hp}, {atk}, {df}, {spe}, {bio}, T_{t1.upper()}, {c2} }},  // {num} {t1}{"/" + t2 if t2 else ""}\n')
     out.append("};\n\n")
 
     # Solo FR y DE tienen nombre propio en gen 1; ES/IT/PT usan el ingles.
