@@ -517,6 +517,26 @@ def run_battle(player, foe, rng, player_ai=AI_ELITE, foe_ai=AI_ELITE,
 # 6.3: Legendaere sind als Gegner ausgeschlossen.
 WILD_POOL = [n for n in sorted(BASE_STATS) if n not in LEGENDARY]
 
+# 6.3: Gegnerlevel ist Spielerlevel +/- FOE_LEVEL_SPREAD. Die Untergrenze
+# liegt normalerweise bei 2 - unterhalb von Spielerlevel LOW_FLOOR_UNTIL aber
+# beim Spielerlevel selbst, sonst geht der allererste Kampf zwingend gegen
+# einen staerkeren Gegner. Ab Level 3 bleibt die Spanne unangetastet, damit
+# der schwaechere Gegner erhalten bleibt.
+FOE_LEVEL_SPREAD = 2
+LOW_FLOOR_UNTIL = 3
+
+
+def foe_level_range(player_level, spread=FOE_LEVEL_SPREAD):
+    """Untere und obere Grenze des Gegnerlevels nach 6.3."""
+    floor = player_level if player_level < LOW_FLOOR_UNTIL else 2
+    low = max(floor, player_level - spread)
+    return low, max(low, player_level + spread)
+
+
+def pick_foe_level(player_level, rng, spread=FOE_LEVEL_SPREAD):
+    low, high = foe_level_range(player_level, spread)
+    return low if high == low else low + rng.randrange(high - low + 1)
+
 
 def make_player(dex, level, rng, bond=0, energy=100, berry=False):
     # Gene wie in pet.cpp beim Schluepfen: 90 + random(21)
@@ -526,13 +546,16 @@ def make_player(dex, level, rng, bond=0, energy=100, berry=False):
 
 
 def make_foe(dex, level, grudge=False):
-    # 6.1: Gene fest auf 100 %, ausser beim Rivalen
-    return Combatant(dex, max(2, level), genes=(100, 100, 100), grudge=grudge)
+    # 6.1: Gene fest auf 100 %, ausser beim Rivalen. Das Level waehlt der
+    # Aufrufer ueber pick_foe_level() - hier wird nichts mehr abgefangen.
+    return Combatant(dex, level, genes=(100, 100, 100), grudge=grudge)
 
 
 def simulate(n, level, rng, bond=0, energy=100, berry=False,
              player_ai=AI_ELITE, foe_ai=AI_ELITE, player_dex=None,
-             foe_dex=None):
+             foe_dex=None, spread=0):
+    """spread 0 = gleichstufige Gegner, wie die Abnahme aus Phase 10 es
+    verlangt. spread 2 ist die echte Begegnung aus 6.3."""
     tally = {'win': 0, 'loss': 0, 'draw': 0}
     rounds_total = 0
     timeouts = 0
@@ -540,7 +563,7 @@ def simulate(n, level, rng, bond=0, energy=100, berry=False,
         pdex = player_dex or rng.choice(WILD_POOL)
         fdex = foe_dex or rng.choice(WILD_POOL)
         player = make_player(pdex, level, rng, bond, energy, berry)
-        foe = make_foe(fdex, level)
+        foe = make_foe(fdex, pick_foe_level(level, rng, spread))
         result, rnds = run_battle(player, foe, rng, player_ai, foe_ai)
         tally[result] += 1
         rounds_total += rnds
@@ -609,6 +632,25 @@ def self_test():
     for dex in BASE_STATS:
         assert moves_for_level(dex, 100), 'Spezies ohne Attacke: %d' % dex
         assert len(moves_for_level(dex, 100)) <= MOVE_SLOTS
+
+    # Gegnerlevel nach 6.3: unter Level 3 ist die Untergrenze das
+    # Spielerlevel, ab Level 3 bleibt die Spanne unangetastet.
+    assert foe_level_range(1) == (1, 3), 'Lv1 darf nicht bei 2 anfangen'
+    assert foe_level_range(2) == (2, 4)
+    assert foe_level_range(3) == (2, 5), 'ab Lv3 bleibt der schwaechere Gegner'
+    assert foe_level_range(5) == (3, 7)
+    assert foe_level_range(25) == (23, 27)
+    # spread 0 heisst gleichstufig - auch auf Level 1
+    assert foe_level_range(1, 0) == (1, 1)
+    assert foe_level_range(25, 0) == (25, 25)
+    # gezogene Level bleiben in der Spanne, und Level 1 zieht auch mal 1
+    rng = random.Random(11)
+    drawn = {pick_foe_level(1, rng) for _ in range(200)}
+    assert drawn <= {1, 2, 3} and drawn == {1, 2, 3}, drawn
+    for lv in (3, 10, 50):
+        low, high = foe_level_range(lv)
+        rng = random.Random(lv)
+        assert all(low <= pick_foe_level(lv, rng) <= high for _ in range(200))
 
     # Erschoepfung: ATK und SPD -25 %, DEF bleibt unberuehrt
     tired = Combatant(1, 25, energy=10)
@@ -681,6 +723,11 @@ def main(argv=None):
                     help='feste Spezies des Spielers (sonst zufaellig)')
     ap.add_argument('--foe-dex', type=int, default=None,
                     help='feste Spezies des Gegners (sonst zufaellig)')
+    # 0 haelt die Abnahme aus Phase 10 gleichstufig, 2 ist die echte
+    # Begegnungsspanne aus 6.3.
+    ap.add_argument('--spread', type=int, default=0,
+                    help='Gegnerlevel Spielerlevel +/- N (0 = gleichstufig, '
+                         '2 = Begegnung nach 6.3)')
     ap.add_argument('--verbose', action='store_true',
                     help='einen einzelnen Kampf mitschreiben')
     ap.add_argument('--self-test', action='store_true')
@@ -697,12 +744,13 @@ def main(argv=None):
         fdex = args.foe_dex or rng.choice(WILD_POOL)
         player = make_player(pdex, args.level, rng, args.bond, args.energy,
                              args.berry)
-        foe = make_foe(fdex, args.level)
+        foe = make_foe(fdex, pick_foe_level(args.level, rng, args.spread))
         log = []
         result, rnds = run_battle(player, foe, rng, args.player_ai, args.ai,
                                   log)
-        print('Dex %d (%d HP) gegen Dex %d (%d HP), Level %d'
-              % (pdex, player.max_hp, fdex, foe.max_hp, args.level))
+        print('Dex %d Lv %d (%d HP) gegen Dex %d Lv %d (%d HP)'
+              % (pdex, player.level, player.max_hp,
+                 fdex, foe.level, foe.max_hp))
         print('\n'.join(log))
         print('Ergebnis: %s nach %d Runden' % (result, rnds))
         return 0
@@ -710,11 +758,14 @@ def main(argv=None):
     tally, rounds_total, timeouts = simulate(
         args.n, args.level, rng, bond=args.bond, energy=args.energy,
         berry=args.berry, player_ai=args.player_ai, foe_ai=args.ai,
-        player_dex=args.player_dex, foe_dex=args.foe_dex)
+        player_dex=args.player_dex, foe_dex=args.foe_dex, spread=args.spread)
 
     n = args.n
-    print('%d Kaempfe, Level %d, Gegner gleichstufig (KI: %s)'
-          % (n, args.level, args.ai))
+    low, high = foe_level_range(args.level, args.spread)
+    scope = ('gleichstufig' if low == high == args.level
+             else 'Gegnerlevel %d-%d' % (low, high))
+    print('%d Kaempfe, Level %d, %s (KI: %s)'
+          % (n, args.level, scope, args.ai))
     print('Siege       %5d   %s' % (tally['win'], _fmt(tally['win'], n)))
     print('Niederlagen %5d   %s' % (tally['loss'], _fmt(tally['loss'], n)))
     print('Unentsch.   %5d   %s' % (tally['draw'], _fmt(tally['draw'], n)))

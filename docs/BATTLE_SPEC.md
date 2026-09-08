@@ -359,6 +359,29 @@ Zwei Filter, die beide auf bereits vorhandene Daten zugreifen:
 
 Legendäre sind ausgeschlossen. Gegnerlevel `Spielerlevel ± 2`, minimal 2.
 
+**Ausnahme unter Spielerlevel 3:** dort ist die Untergrenze das Spielerlevel
+selbst, nicht 2. Sonst trifft ein frisch geschlüpftes Pokémon auf Level 1 nur
+Gegner der Level 2 bis 3 — der allererste Kampf ginge zwingend gegen einen
+stärkeren Gegner, und genau der entscheidet, ob der Spieler das Kampfsystem
+überhaupt annimmt. Gemessen sind das 36,9 % Siegquote statt 42,4 %.
+
+Ab Level 3 bleibt die Spanne **unangetastet**. Der schwächere Gegner ist gewollt:
+er ist die Verschnaufpause zwischen zwei harten Kämpfen und die Gelegenheit,
+einen freien Kampf ohne Risiko mitzunehmen. Die Regel hebt also nur den Boden im
+Onboarding an, sie verschiebt das Balancing danach nicht.
+
+Weil die Untergrenze nach unten abschneidet, die Obergrenze aber nicht, liegt das
+mittlere Gegnerlevel auf den Leveln 1 bis 3 systematisch über dem Spielerlevel
+(Level 1 → Spanne 1–3, Level 2 → 2–4, Level 3 → 2–5). Ab Level 4 ist die Spanne
+wieder symmetrisch. Das frühe Spiel ist dadurch von sich aus das schwerste:
+gemessen 42,4 / 40,5 / 49,2 / 51,0 / 55,4 % auf den Leveln 1 bis 5. Die
+Onboarding-Regel oben hebt davon nur Level 1 an — auf Level 2 ist die
+Untergrenze 2 bereits das Spielerlevel, dort greift sie bauartbedingt nicht.
+
+Nachzurechnen mit `python3 tools/battle_sim.py --level <n> --spread 2`.
+Ohne `--spread` kämpft der Simulator gleichstufig, so wie es die Abnahme in
+§10, Phase 3 verlangt.
+
 **Shiny-Gegner:** 1 zu 64. Sieg gibt die Medaille `MED_SHINYWIN` und verdoppelt
 einmalig die Shiny-Chance des nächsten Eis.
 
