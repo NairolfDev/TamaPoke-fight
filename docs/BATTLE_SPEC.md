@@ -357,30 +357,47 @@ Zwei Filter, die beide auf bereits vorhandene Daten zugreifen:
 | Dämmerung | Gift, Boden, Gestein |
 | Nacht | Geist, Psycho, Eis |
 
-Legendäre sind ausgeschlossen. Gegnerlevel `Spielerlevel ± 2`, minimal 2.
+Legendäre sind ausgeschlossen. Das Gegnerlevel ist `Spielerlevel ± spread`, und
+die Spanne **schrumpft nahe am Boden, statt abgeschnitten zu werden**:
 
-**Ausnahme unter Spielerlevel 3:** dort ist die Untergrenze das Spielerlevel
-selbst, nicht 2. Sonst trifft ein frisch geschlüpftes Pokémon auf Level 1 nur
-Gegner der Level 2 bis 3 — der allererste Kampf ginge zwingend gegen einen
-stärkeren Gegner, und genau der entscheidet, ob der Spieler das Kampfsystem
-überhaupt annimmt. Gemessen sind das 36,9 % Siegquote statt 42,4 %.
+```
+spread     = min(2, spielerLevel - 1)
+gegnerLevel = spielerLevel ± spread      // harte Untergrenze 1
+```
 
-Ab Level 3 bleibt die Spanne **unangetastet**. Der schwächere Gegner ist gewollt:
-er ist die Verschnaufpause zwischen zwei harten Kämpfen und die Gelegenheit,
-einen freien Kampf ohne Risiko mitzunehmen. Die Regel hebt also nur den Boden im
-Onboarding an, sie verschiebt das Balancing danach nicht.
+| Spielerlevel | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| Gegnerlevel | 1 | 1–3 | 1–5 | 2–6 | 3–7 |
 
-Weil die Untergrenze nach unten abschneidet, die Obergrenze aber nicht, liegt das
-mittlere Gegnerlevel auf den Leveln 1 bis 3 systematisch über dem Spielerlevel
-(Level 1 → Spanne 1–3, Level 2 → 2–4, Level 3 → 2–5). Ab Level 4 ist die Spanne
-wieder symmetrisch. Das frühe Spiel ist dadurch von sich aus das schwerste:
-gemessen 42,4 / 40,5 / 49,2 / 51,0 / 55,4 % auf den Leveln 1 bis 5. Die
-Onboarding-Regel oben hebt davon nur Level 1 an — auf Level 2 ist die
-Untergrenze 2 bereits das Spielerlevel, dort greift sie bauartbedingt nicht.
+Ab Level 4 ist das dasselbe wie eine feste Spanne von ± 2; darunter ist es
+symmetrisch statt nach oben verschoben.
 
-Nachzurechnen mit `python3 tools/battle_sim.py --level <n> --spread 2`.
-Ohne `--spread` kämpft der Simulator gleichstufig, so wie es die Abnahme in
-§10, Phase 3 verlangt.
+**Warum nicht einfach unten abschneiden.** Eine abgeschnittene Spanne bleibt oben
+stehen: mit fester Spanne ± 2 und Untergrenze 2 träfe ein Spieler auf Level 1 nur
+Gegner der Level 2–3, auf Level 2 die Level 2–4. Das mittlere Gegnerlevel liegt
+damit systematisch über dem Spielerlevel, und zwar genau dort, wo der Spieler am
+wenigsten Attacken und den kleinsten Statspielraum hat. Gemessen waren das
+**36,9 % Siegquote auf Level 1 und 40,5 % auf Level 2** — die beiden ersten
+Kämpfe eines jeden Spielers waren die schwersten des ganzen Spiels.
+
+Eine Untergrenze zu senken kuriert davon nur das Symptom und nur auf Level 1. Die
+schrumpfende Spanne behebt die Ursache: das mittlere Gegnerlevel ist auf **jedem**
+Level exakt das Spielerlevel. Auf Level 1 heißt das ein gleichstufiger Gegner —
+die Spanne ist dort null, nicht abgeschnitten.
+
+Der schwächere Gegner bleibt dabei erhalten, sobald es ihn überhaupt geben kann:
+ab Level 2 nach unten, ab Level 4 in voller Breite. Er ist die Verschnaufpause
+zwischen zwei harten Kämpfen.
+
+Gemessen mit `--spread 2`, je 20 000 Kämpfe, Spieler gegen wilde KI:
+
+| Level | 1 | 2 | 3 | 4 | 5 | 6 | 8 | 10 |
+|---|---|---|---|---|---|---|---|---|
+| Siegquote | 51,2 % | 49,9 % | 54,7 % | 51,0 % | 55,4 % | 52,8 % | 54,3 % | 54,7 % |
+
+Kein Ausreißer nach unten, alles im Korridor 45–65 %. Nachzurechnen mit
+`python3 tools/battle_sim.py --level <n> --spread 2`. Ohne `--spread` kämpft der
+Simulator gleichstufig, so wie es die Abnahme in §10, Phase 3 verlangt.
 
 **Shiny-Gegner:** 1 zu 64. Sieg gibt die Medaille `MED_SHINYWIN` und verdoppelt
 einmalig die Shiny-Chance des nächsten Eis.
