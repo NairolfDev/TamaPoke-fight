@@ -35,6 +35,57 @@ kostet den Nutzer einen Flash-Zyklus zum Merken. Nie ungetesteten Code committen
 Benötigte Libraries: `Arduino_GFX` (moononournation), `SensorLib` (Lewis He),
 `XPowersLib` (Lewis He), `ESP_I2S` (im ESP32-Core enthalten).
 
+### Der Sketch-Ordner muss `TamaPoke` heißen
+
+Arduino verlangt, dass die Haupt-`.ino` genauso heißt wie ihr Ordner. Das Repo
+heißt `TamaPoke-fight`, der Sketch `TamaPoke.ino` — ein `compile .` im Repo-Ordner
+bricht deshalb mit *„main file missing from sketch"* ab. Einmalig eine Junction
+anlegen und **von dort** bauen:
+
+```
+cmd /c mklink /J "C:\Users\oberh\Webseits\TamaPoke" "C:\Users\oberh\Webseits\TamaPoke-fight"
+```
+
+Gilt auch für Worktrees unter `.claude/worktrees/` — deren Ordnername passt nie.
+
+### Windows
+
+`arduino-cli` liegt unter `C:\Program Files\Arduino CLI\` und steht auf der
+Machine-PATH. Eine Shell, die vor der Installation offen war, sieht sie nicht —
+neue PowerShell öffnen, nicht die PATH-Variable von Hand basteln.
+
+**In PowerShell brauchen Pfade mit Leerzeichen den Aufruf-Operator `&`.** Ohne ihn
+behandelt PowerShell den String als Text und gibt ihn nur aus, statt ihn
+auszuführen:
+
+```powershell
+& "C:\Program Files\Arduino CLI\arduino-cli.exe" core list   # richtig
+"C:\Program Files\Arduino CLI\arduino-cli.exe" core list     # gibt nur den Pfad aus
+```
+
+Weitere PowerShell-Stolpersteine: `&&` und `||` gibt es in Windows PowerShell 5.1
+nicht (`;` oder `if ($?) { … }`), und `2>&1` auf eine native `.exe` verpackt jede
+stderr-Zeile in einen `NativeCommandError` — sieht nach Absturz aus, obwohl der
+Exitcode 0 ist.
+
+Port ist `COM3`, nicht `/dev/ttyACM0`:
+
+```
+arduino-cli upload -p COM3 -b "$FQBN" --input-dir build\baseline
+```
+
+**Es kann immer nur ein Programm den COM-Port halten.** Erst flashen, Serial-
+Monitor schließen, dann Sprites schicken.
+
+**`tools/send_sd.py` braucht unter Windows zwingend `--port`:**
+
+```
+python3 tools/send_sd.py --port COM3
+```
+
+Ohne die Angabe sucht `find_port()` nach `/dev/cu.usbmodem*` — ein macOS-Pfad —
+und bricht mit „no encuentro la placa" ab. Braucht `pip install pyserial`.
+
 ## Generierte Dateien — nicht von Hand editieren
 
 | Datei | Generator | Quelle |
@@ -110,3 +161,26 @@ Schnelltest-Konstanten in `pet.h`: `PET_TICK_MS`, `MINUTES_PER_LEVEL`,
   ist aktiv, unnötige Divergenz macht spätere Merges teuer.
 - Wenn ein Feature das Spielgefühl verändert (Balancing, Zeitkonstanten),
   **erst fragen**, nicht einfach entscheiden.
+
+## Werkzeuge einrichten — dauerhaft, nicht für die Sitzung
+
+**Alles, was du einrichtest, muss aus einer normalen PowerShell im Repo-Ordner
+funktionieren und einen Neustart überleben.** Nichts in Sitzungs-, Scratchpad-
+oder Temp-Verzeichnissen ablegen — das ist nach dem nächsten Start weg, und der
+Nutzer steht mit einem Befehl da, der bei ihm nicht läuft.
+
+Konkret heißt das:
+
+- Toolchains an ihren Standardort: `arduino-cli` nach `%LOCALAPPDATA%\Arduino15`
+  (Cores, Libraries, Konfiguration). Kein `ARDUINO_DIRECTORIES_DATA` auf einen
+  eigenen Pfad biegen.
+- Build-Artefakte nach `build/` — steht in `.gitignore` und liegt im Repo.
+- Hilfskonstrukte wie die `TamaPoke`-Junction an einen festen Ort neben das Repo,
+  nicht in ein Temp-Verzeichnis.
+- **Vor dem Melden nachprüfen**, und zwar so, wie der Nutzer es aufruft: neue
+  PowerShell, in den Repo-Ordner, Befehl ohne absoluten Pfad. Ein `core list`,
+  das nur in deiner Shell funktioniert, ist nicht eingerichtet.
+
+Ein länger laufender Hintergrund-Install ist erst fertig, wenn er fertig ist —
+währenddessen zeigt `arduino-cli core list` „No platforms installed". Das Ergebnis
+melden, nicht den Zwischenstand.
