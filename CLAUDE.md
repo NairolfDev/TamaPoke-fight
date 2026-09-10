@@ -68,6 +68,15 @@ nicht (`;` oder `if ($?) { … }`), und `2>&1` auf eine native `.exe` verpackt j
 stderr-Zeile in einen `NativeCommandError` — sieht nach Absturz aus, obwohl der
 Exitcode 0 ist.
 
+**Keine überlangen Befehlszeilen zum Kopieren geben.** Die Konsole bricht eine
+eingefügte Zeile an der Fensterbreite um, und der Umbruch landet *im* String.
+Ergebnis sind Fehler, die aussehen, als fehle eine Datei — `is not recognized as
+the name of a cmdlet` oder `Cannot find path … because it does not exist`, mit dem
+Pfad an genau der Umbruchstelle zerschnitten (`…\Local\Ar` + `duino15\…`). Die
+Datei ist in Wahrheit da. Lange Aufrufe auf mehrere kurze Zeilen verteilen
+(Variablen setzen, dann aufrufen) — oder den Befehl selbst ausführen, statt ihn
+zum Kopieren zu geben.
+
 Port ist `COM3`, nicht `/dev/ttyACM0`:
 
 ```
