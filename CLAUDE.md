@@ -48,6 +48,21 @@ cmd /c mklink /J "C:\Users\oberh\Webseits\TamaPoke" "C:\Users\oberh\Webseits\Tam
 
 Gilt auch für Worktrees unter `.claude/worktrees/` — deren Ordnername passt nie.
 
+**Achtung, stille Falle:** die Junction oben zeigt auf den Haupt-Checkout, also
+auf `main`. Wer in einem Worktree arbeitet und aus `…\Webseits\TamaPoke` baut,
+kompiliert **den falschen Branch** — ohne Fehlermeldung, mit grünem Exitcode und
+plausibler Größenangabe. Für einen Worktree eine eigene Junction anlegen; der
+Ordner muss wieder `TamaPoke` heißen, also braucht er ein eigenes Elternverzeichnis:
+
+```
+cmd /c mklink /J "C:\Users\oberh\Webseits\wt-phase3\TamaPoke" "C:\Users\oberh\Webseits\TamaPoke-fight\.claude\worktrees\phase-3-battle-sim-7349e5"
+```
+
+Gegenprobe nach jedem Build, bei dem es drauf ankommt: das geänderte Konstrukt im
+Binary suchen, nicht der Größenangabe glauben. Zwei Builds derselben Quelle
+unterscheiden sich um rund 65 Byte (Zeitstempel und Build-Pfade) — sieht ein Diff
+genau so aus, ist die Änderung *nicht* mitkompiliert worden.
+
 ### Windows
 
 `arduino-cli` liegt unter `C:\Program Files\Arduino CLI\` und steht auf der

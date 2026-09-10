@@ -126,11 +126,16 @@ static const uint8_t CRACK2[][2] = { {11,13},{12,14},{11,15},{20,12},{19,13},{20
 static const uint16_t STARS[][2] = { {120,140},{330,120},{370,210},{95,230},{280,90},{160,95} };
 
 bool wasPressed = false;
-// eleccion de inicial (primera partida): Bulbasaur / Charmander / Squirtle, 3 filas
-static const int16_t STARTER_DEX[3] = { 1, 4, 7 };
-#define STARTER_ROW_Y 110
-#define STARTER_ROW_H 70
-#define STARTER_ROW_GAP 8
+// Starterwahl (erste Partie): Bisasam / Glumanda / Schiggy / Pikachu / Tragosso.
+// Zeilenhoehe und Startpunkt haengen an der Anzahl: fuenf Zeilen a 70 px wuerden
+// unten aus dem runden Screen laufen. Bei 326 px Zeilenbreite liegt das nutzbare
+// Band zwischen y 69 und 397, fuenf Zeilen a 54 px belegen 92 bis 386.
+static const int16_t STARTER_DEX[] = { 1, 4, 7, 25, 104 };
+#define NUM_STARTER_DEX (int)(sizeof(STARTER_DEX) / sizeof(STARTER_DEX[0]))
+#define STARTER_ROW_Y 92
+#define STARTER_ROW_H 54
+#define STARTER_ROW_GAP 6
+#define GAL_CELL 80  // Zellenkante der Miniaturen, auch von der Galerie benutzt
 // boton-CTA de evolucion (centrado, mitad de pantalla)
 #define EVO_BTN_W 256
 #define EVO_BTN_H 64
@@ -549,8 +554,8 @@ void onSwipe(int dir) {
 
 void onTap(int16_t x, int16_t y) {
   // Serial.printf("TOUCH %d %d\n", x, y);  // diagnostico (silenciado: satura el log)
-  if (pet.awaitingStarter()) {  // primera partida: elegir inicial
-    for (int i = 0; i < 3; i++) {
+  if (pet.awaitingStarter()) {  // erste Partie: Starter waehlen
+    for (int i = 0; i < NUM_STARTER_DEX; i++) {
       int ry = STARTER_ROW_Y + i * (STARTER_ROW_H + STARTER_ROW_GAP);
       if (x >= 70 && x <= 396 && y >= ry && y <= ry + STARTER_ROW_H) {
         pet.chooseStarter(STARTER_DEX[i]);
@@ -784,17 +789,20 @@ void renderStarterSelect() {
   gfx->setTextSize(2);
   gfx->setCursor(CX - strlen(t) * 6, 68);
   gfx->print(t);
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < NUM_STARTER_DEX; i++) {
     int16_t d = STARTER_DEX[i];
     const DexEntry &de = DEX_TBL[d];
     int ry = STARTER_ROW_Y + i * (STARTER_ROW_H + STARTER_ROW_GAP);
     gfx->fillRoundRect(70, ry, 326, STARTER_ROW_H, 14, lerp565(de.accent, UI_WHITE, 6, 8));
     gfx->drawRoundRect(70, ry, 326, STARTER_ROW_H, 14, de.accent);
-    const uint8_t *th = thumbs.get(d);     // miniatura del inicial (si la SD esta lista)
-    if (th) drawThumb(th, 76, ry - 5, 3, false);
+    // Miniatur des Starters (falls die SD schon bereit ist). drawThumb zentriert
+    // in einer GAL_CELL-Zelle, deshalb die Zelle auf der Zeile ausrichten statt
+    // mit festem Versatz; Skalierung 2, damit sie in 54 px Zeilenhoehe passt.
+    const uint8_t *th = thumbs.get(d);
+    if (th) drawThumb(th, 76, ry + (STARTER_ROW_H - GAL_CELL) / 2, 2, false);
     gfx->setTextColor(UI_INK);
     gfx->setTextSize(3);
-    gfx->setCursor(178, ry + 24);
+    gfx->setCursor(178, ry + (STARTER_ROW_H - 24) / 2);  // Text size 3 ist 24 px hoch
     gfx->print(dexName(d));
   }
   gfx->flush();
@@ -1678,7 +1686,8 @@ void keyboardTap(int16_t x, int16_t y) {
 
 #define GAL_X 73
 #define GAL_Y 84
-#define GAL_CELL 80
+// GAL_CELL steht weiter oben bei den Layout-Konstanten: die Starterwahl
+// richtet ihre Miniaturen daran aus und wird vorher uebersetzt.
 
 // dibuja una miniatura centrada en su celda; sil=true la pinta en tinta
 void drawThumb(const uint8_t *b, int x, int y, int s, bool sil) {
