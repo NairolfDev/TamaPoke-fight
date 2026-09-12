@@ -355,12 +355,12 @@ static void simPlayer(Fighter &f, uint16_t dex, uint8_t level) {
 // gehoert in die UI-Phase.
 void battleCmd(uint16_t dex) {
   if (dex < 1 || dex > DEX_COUNT) {
-    Serial.println("ERR dex fuera de rango");
+    Serial.println("ERR dex ausserhalb des Bereichs");
     Serial.println("DONE");
     return;
   }
   if (pet.isEgg()) {
-    Serial.println("ERR el huevo no pelea");
+    Serial.println("ERR ein Ei kaempft nicht");
     Serial.println("DONE");
     return;
   }
@@ -372,7 +372,7 @@ void battleCmd(uint16_t dex) {
                 DEX_TBL[pl.dex].name, pl.level, pl.maxHp, pl.atk, pl.def,
                 pl.spe, DEX_TBL[fo.dex].name, fo.level, fo.maxHp,
                 shiny ? " SHINY" : "");
-  if (pl.exhausted) Serial.println("ERSCHOEPFT: atk y spe -25%");
+  if (pl.exhausted) Serial.println("ERSCHOEPFT: ATK und SPD -25%");
 
   uint8_t res = BR_ONGOING, round = 0;
   while (res == BR_ONGOING && round < BATTLE_MAX_ROUNDS) {
@@ -383,15 +383,15 @@ void battleCmd(uint16_t dex) {
     res = battleRound(pl, fo, slot, AI_WILD, ev, &n);
     for (uint8_t i = 0; i < n; i++) {
       const BattleEvent &e = ev[i];
-      const char *who = e.actor == 0 ? "TU" : "RIV";
+      const char *who = e.actor == 0 ? "DU " : "GEG";
       if (e.berry) {
-        Serial.printf("R%-2u %s BAYA\n", round, who);
+        Serial.printf("R%-2u %s BEERE\n", round, who);
       } else if (e.skipped) {
-        Serial.printf("R%-2u %s PARALIZADO, pierde turno\n", round, who);
+        Serial.printf("R%-2u %s PARALYSIERT, SETZT AUS\n", round, who);
       } else if (e.missed) {
-        Serial.printf("R%-2u %s %s FALLA\n", round, who, moveName(e.move));
+        Serial.printf("R%-2u %s %s DANEBEN\n", round, who, moveName(e.move));
       } else if (e.stageOnly) {
-        Serial.printf("R%-2u %s %s (cambio de fase)\n", round, who,
+        Serial.printf("R%-2u %s %s STUFE VERAENDERT\n", round, who,
                       moveName(e.move));
       } else {
         const char *eff = e.effMult == 0 ? " KEIN EFFEKT"
@@ -407,7 +407,7 @@ void battleCmd(uint16_t dex) {
     Serial.printf("R%-2u hp %u/%u vs %u/%u\n", round, pl.hp, pl.maxHp, fo.hp,
                   fo.maxHp);
   }
-  Serial.printf("resultado=%s rondas=%u\n",
+  Serial.printf("ergebnis=%s runden=%u\n",
                 res == BR_WIN ? "WIN" : res == BR_LOSS ? "LOSS" : "DRAW",
                 round);
   Serial.println("DONE");
