@@ -21,6 +21,7 @@
 #include "rtcbat.h"
 #include "i18n.h"
 #include "audio.h"
+#include "battle.h"
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
@@ -328,6 +329,136 @@ void updateBrightness(uint32_t now) {
   }
 }
 
+// ---------- Kampf ueber die serielle Konsole (Phase 3, headless) ----------
+
+// Synthetischer Spieler fuer BSIM: zufaellige Gene wie beim Schluepfen, damit
+// die Siegquote mit tools/battle_sim.py vergleichbar bleibt. Der Prototyp
+// laesst beide Seiten aus dem ganzen nicht-legendaeren Dex wuerfeln.
+static void simPlayer(Fighter &f, uint16_t dex, uint8_t level) {
+  uint8_t gAtk = 90 + random(21);
+  uint8_t gDef = 90 + random(21);
+  uint8_t gSpe = 90 + random(21);
+  fighterFromDex(f, dex, level, false, false);
+  const DexEntry &de = DEX_TBL[dex];
+  // calcStat() aus pet.cpp: base * gene / 100 + level + Training (hier 0)
+  f.atk = (uint16_t)((uint32_t)de.bAtk * gAtk / 100 + level);
+  f.def = (uint16_t)((uint32_t)de.bDef * gDef / 100 + level);
+  f.spe = (uint16_t)((uint32_t)de.bSpe * gSpe / 100 + level);
+  f.maxHp = battleMaxHp(de.bHp, gAtk, level);
+  f.hp = f.maxHp;
+  f.isPlayer = true;
+  f.endureLeft = 1;
+}
+
+// BATTLE <dex>: ein Kampf des echten Pets gegen die Spezies, Runde fuer Runde
+// mitgeschrieben. Wendet noch KEINE Kosten und Belohnungen aus 6.7 an - das
+// gehoert in die UI-Phase.
+void battleCmd(uint16_t dex) {
+  if (dex < 1 || dex > DEX_COUNT) {
+    Serial.println("ERR dex fuera de rango");
+    Serial.println("DONE");
+    return;
+  }
+  if (pet.isEgg()) {
+    Serial.println("ERR el huevo no pelea");
+    Serial.println("DONE");
+    return;
+  }
+  Fighter pl, fo;
+  fighterFromPet(pl, pet);
+  bool shiny = random(64) == 0;  // 6.3: Shiny-Gegner 1 zu 64
+  fighterFromDex(fo, dex, pickFoeLevel(pl.level, 2), shiny, false);
+  Serial.printf("%s Lv%u (%u HP, atk=%u def=%u spe=%u) vs %s Lv%u (%u HP)%s\n",
+                DEX_TBL[pl.dex].name, pl.level, pl.maxHp, pl.atk, pl.def,
+                pl.spe, DEX_TBL[fo.dex].name, fo.level, fo.maxHp,
+                shiny ? " SHINY" : "");
+  if (pl.exhausted) Serial.println("ERSCHOEPFT: atk y spe -25%");
+
+  uint8_t res = BR_ONGOING, round = 0;
+  while (res == BR_ONGOING && round < BATTLE_MAX_ROUNDS) {
+    round++;
+    int8_t slot = battleChooseMove(pl, fo, AI_ELITE);
+    BattleEvent ev[BATTLE_MAX_EVENTS];
+    uint8_t n = 0;
+    res = battleRound(pl, fo, slot, AI_WILD, ev, &n);
+    for (uint8_t i = 0; i < n; i++) {
+      const BattleEvent &e = ev[i];
+      const char *who = e.actor == 0 ? "TU" : "RIV";
+      if (e.berry) {
+        Serial.printf("R%-2u %s BAYA\n", round, who);
+      } else if (e.skipped) {
+        Serial.printf("R%-2u %s PARALIZADO, pierde turno\n", round, who);
+      } else if (e.missed) {
+        Serial.printf("R%-2u %s %s FALLA\n", round, who, moveName(e.move));
+      } else if (e.stageOnly) {
+        Serial.printf("R%-2u %s %s (cambio de fase)\n", round, who,
+                      moveName(e.move));
+      } else {
+        const char *eff = e.effMult == 0 ? " KEIN EFFEKT"
+                          : e.effMult > 4 ? " SEHR EFFEKTIV"
+                          : e.effMult < 4 ? " NICHT SEHR EFFEKTIV" : "";
+        Serial.printf("R%-2u %s %s %u dmg%s%s%s%s\n", round, who,
+                      moveName(e.move), e.damage, eff,
+                      e.crit ? " VOLLTREFFER" : "",
+                      e.endured ? " HAELT DURCH" : "",
+                      e.fainted ? " K.O." : "");
+      }
+    }
+    Serial.printf("R%-2u hp %u/%u vs %u/%u\n", round, pl.hp, pl.maxHp, fo.hp,
+                  fo.maxHp);
+  }
+  Serial.printf("resultado=%s rondas=%u\n",
+                res == BR_WIN ? "WIN" : res == BR_LOSS ? "LOSS" : "DRAW",
+                round);
+  Serial.println("DONE");
+}
+
+// BSIM <n> [level]: n Kaempfe gleichstufig, Spieler mit der Elite-KI gegen
+// wilde Gegner - dieselbe Aufstellung wie der Standardlauf des Prototyps
+// (python3 tools/battle_sim.py --n <n> --level <level>). Abnahme nach
+// Abschnitt 10, Phase 3: die Siegquote muss dort und hier gleich sein.
+void bsimCmd(uint16_t n, uint8_t level) {
+  if (n == 0) {
+    Serial.println("ERR n=0");
+    Serial.println("DONE");
+    return;
+  }
+  uint16_t win = 0, loss = 0, draw = 0;
+  uint32_t roundsTotal = 0, timeouts = 0;
+  uint32_t heapStart = ESP.getFreeHeap(), heap50 = 0;
+
+  for (uint16_t i = 0; i < n; i++) {
+    Fighter pl, fo;
+    simPlayer(pl, pickWildDex(-1), level);
+    fighterFromDex(fo, pickWildDex(-1), level, false, false);
+    uint8_t rounds = 0;
+    uint8_t res = battleRun(pl, fo, AI_ELITE, AI_WILD, &rounds);
+    if (res == BR_WIN) win++;
+    else if (res == BR_LOSS) loss++;
+    else draw++;
+    roundsTotal += rounds;
+    if (rounds >= BATTLE_MAX_ROUNDS) timeouts++;
+    if (i + 1 == 50) heap50 = ESP.getFreeHeap();
+    // der Watchdog will zwischendurch Luft
+    if ((i & 0x3F) == 0x3F) delay(1);
+  }
+
+  // Prozent in Zehnteln, damit die Auswertung ohne Float bleibt
+  uint32_t rate = (uint32_t)win * 1000 / n;
+  uint32_t avg10 = roundsTotal * 10 / n;
+  Serial.printf("%u Kaempfe, Level %u, gleichstufig (KI: wild)\n", n, level);
+  Serial.printf("Siege       %5u   %u.%u %%\n", win, rate / 10, rate % 10);
+  Serial.printf("Niederlagen %5u\n", loss);
+  Serial.printf("Unentsch.   %5u\n", draw);
+  Serial.printf("Runden      %u.%u im Schnitt, %u am Zeitlimit\n", avg10 / 10,
+                avg10 % 10, (unsigned)timeouts);
+  Serial.printf("heap start=%u nach50=%u ende=%u min=%u\n", (unsigned)heapStart,
+                (unsigned)heap50, ESP.getFreeHeap(), ESP.getMinFreeHeap());
+  Serial.printf("Abnahme 45-65 %%: %s\n",
+                (rate >= 450 && rate <= 650) ? "OK" : "VERFEHLT");
+  Serial.println("DONE");
+}
+
 // ---------- consola serie (provision de SD + depuracion) ----------
 
 void handleSerial() {
@@ -432,6 +563,14 @@ void handleSerial() {
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.medals,
                   pet.totalMedals, pet.nick);
     Serial.println("DONE");
+  } else if (line.startsWith("BATTLE ")) {
+    battleCmd((uint16_t)line.substring(7).toInt());
+  } else if (line.startsWith("BSIM ")) {
+    String rest = line.substring(5);
+    int sp = rest.indexOf(' ');
+    uint16_t n = (uint16_t)(sp < 0 ? rest : rest.substring(0, sp)).toInt();
+    uint8_t lvl = sp < 0 ? 25 : (uint8_t)rest.substring(sp + 1).toInt();
+    bsimCmd(n, lvl ? lvl : 25);
   }
 }
 
