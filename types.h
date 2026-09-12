@@ -110,6 +110,18 @@ static inline const char *typeName(uint8_t t) {
 // Multiplicador combinado contra un defensor de uno o dos tipos.
 // Devuelve el numerador de una fraccion sobre 4: 0, 1, 2, 4, 8 o 16
 // (x0, x0.25, x0.5, x1, x2, x4). Aplicar como (dmg * m) / 4.
+//
+// ACHTUNG - battle.cpp benutzt das hier NICHT fuer den Schaden, und
+// das ist Absicht. typeMult() kombiniert beide Verteidigertypen und
+// rundet erst am Ende (/4). BATTLE_SPEC 6.4 und der Prototyp
+// tools/battle_sim.py runden nach jedem Typ einzeln (/2, dann /2).
+// Bei Doppeltypen kommt dabei etwas anderes heraus: Schaden 7, erst
+// 1/2x dann 2x, ergibt hier 7, in zwei Schritten aber 6.
+// battleDamage() rechnet deshalb selbst ueber TYPE_MULT_RAW. Wer das
+// auf typeMult() zurueckbaut, verschiebt die Siegquote gegenueber dem
+// Prototyp und reisst die Abnahme aus Abschnitt 10, Phase 3.
+// Fuer Wirksamkeitsanzeige und Arena-KI ist typeMult() richtig, dort
+// kommt es auf die Rundung nicht an.
 static inline uint8_t typeMult(uint8_t atk, uint8_t d1, uint8_t d2) {
   if (atk >= TYPE_COUNT || d1 >= TYPE_COUNT) return 4;
   uint16_t m = TYPE_MULT_RAW(atk, d1) * 2;  // x2 -> base 4
