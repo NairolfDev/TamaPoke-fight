@@ -509,9 +509,22 @@ Runder Screen, 466×466, Mittelpunkt `CX 233`. Die Ecken sind abgeschnitten.
 
 - Gegner oben rechts, leicht verkleinert (`scale` runtersetzen), HP-Balken darüber
 - Eigenes Pokémon unten links, HP-Balken darunter
-- Vier Attackenbuttons auf dem unteren Bogen — dieselben Ankerpunkte, die heute
-  die Icon-Buttons nutzen. AP-Anzeige je Slot, Typfarbe als Button-Akzent, damit
-  man den Vorteil sieht, ohne die Tabelle im Kopf zu haben
+- Attackenbuttons auf dem unteren Bogen — dieselben Ankerpunkte, die heute die
+  Icon-Buttons nutzen. AP-Anzeige je Slot, Typfarbe als Button-Akzent, damit man
+  den Vorteil sieht, ohne die Tabelle im Kopf zu haben.
+
+  **So viele Buttons wie Attacken, keine vier festen Slots.** `movesForLevel()`
+  liefert eins bis vier; die Buttons verteilen sich über die verfügbare
+  Bogenbreite — bei einer Attacke ein breiter Button, bei vier die schmale
+  Viererreihe.
+
+  Begründung: auf Level 1 und 2 hat **die Hälfte aller Spezies nur eine
+  Attacke** — 82 von 146 auf Level 2, siehe die Messreihe zu §6.3. Drei
+  ausgegraute Platzhalter daneben sehen nach einem Defekt aus, und der erste
+  Kampf ist der, der über den Einstieg entscheidet. Ein breiter Button ist auf
+  einem runden Touchscreen zudem leichter zu treffen als ein Viertel. Der
+  Nebeneffekt passt zur Engine: sind alle AP leer, fällt sie auf Verzweifler
+  zurück, und die Reihe kollabiert von selbst auf genau einen Button.
 - Beerenbutton in der Mitte, ausgegraut wenn unentdeckt oder verbraucht
 - Fluchtbutton nur bei freien Kämpfen, nicht in der Arena
 - Beim Rivalen: sein gespeicherter Spitzname im Header statt des Speziesnamens
