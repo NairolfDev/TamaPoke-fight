@@ -1642,8 +1642,8 @@ void renderCardStats() {
   gfx->fillRoundRect(96, 300, 274, 40, 12, UI_BAR_BAD);
   gfx->setTextColor(UI_BG_DAY);
   gfx->setTextSize(2);
-  gfx->setCursor(CX - strlen(T(S_TRAIN_STR)) * 6, 311);
-  gfx->print(T(S_TRAIN_STR));
+  gfx->setCursor(CX - strlen(T(S_FIGHT_FREE)) * 6, 311);
+  gfx->print(T(S_FIGHT_FREE));
 }
 
 // pagina 2: medallas con etiqueta descriptiva
