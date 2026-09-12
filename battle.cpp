@@ -299,7 +299,12 @@ static bool takeTurn(Fighter &att, Fighter &def, int8_t slot, BattleEvent &e) {
     bool crit = random(1000) < critChance(move);
     uint8_t roll = (uint8_t)(217 + random(39));
     uint16_t dmg = battleDamage(att, def, move, roll, crit);
-    if (dmg < 1) dmg = 1;
+    // Mindestschaden 1, damit eine Attacke nie voellig wirkungslos ist - aber
+    // Immunitaet bleibt Immunitaet. Ohne die Ausnahme knabbert eine
+    // 0x-Attacke pro Runde 1 HP ab und kann einen immunen Gegner ueber das
+    // 30-Runden-Limit sogar besiegen. e.effMult ist genau dann 0, wenn einer
+    // der beiden Chart-Faktoren 0 ist - da gibt es keine Rundungsfrage.
+    if (dmg < 1 && e.effMult != 0) dmg = 1;
     if (crit) e.crit = true;
     total += dmg;
     if (dmg >= def.hp) {

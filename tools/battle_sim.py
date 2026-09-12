@@ -390,12 +390,19 @@ def take_turn(attacker, defender, slot, rng, log):
 
     hits = _multi_hits(rng) if effect == 5 else 1
     total = 0
+    immune = effectiveness(move, defender) == 0
     for _ in range(hits):
         if not defender.alive():
             break
         crit = rng.randrange(1000) < _crit_chance(move)
         roll = 217 + rng.randrange(39)
-        dmg = max(1, compute_damage(attacker, defender, move, roll, crit))
+        dmg = compute_damage(attacker, defender, move, roll, crit)
+        # Mindestschaden 1, damit eine Attacke nie voellig wirkungslos ist -
+        # aber Immunitaet bleibt Immunitaet. Ohne die Ausnahme knabbert eine
+        # 0x-Attacke pro Runde 1 HP ab und kann einen immunen Gegner ueber das
+        # 30-Runden-Limit sogar besiegen.
+        if dmg < 1 and not immune:
+            dmg = 1
         total += dmg
         if log is not None and crit:
             log.append('  VOLLTREFFER!')
@@ -626,6 +633,18 @@ def self_test():
     # Typwirksamkeit schlaegt durch: Wasser gegen Gestein/Boden = 4x
     onix = Combatant(95, 25)
     assert effectiveness(101, onix) == 16, 'water -> rock/ground'
+
+    # Immunitaet bleibt Immunitaet: 0x macht 0 Schaden, nicht den
+    # Mindestschaden 1. Boden gegen Kaefer/Flug ist 1/2 * 0 = 0.
+    imm_att = Combatant(104, 26, is_player=True)   # Tragosso, nur Knochenkeule
+    imm_def = Combatant(12, 27)                    # Smettbo, Kaefer/Flug
+    assert imm_att.moves == [36], imm_att.moves
+    assert effectiveness(36, imm_def) == 0
+    rng = random.Random(2)
+    for _ in range(20):                            # genug Versuche, dass es trifft
+        imm_att.pp[0] = 10
+        take_turn(imm_att, imm_def, 0, rng, None)
+        assert imm_def.hp == imm_def.max_hp, 'immuner Gegner nahm Schaden'
 
     # HP-Formel, 6.2
     p = Combatant(1, 25, genes=(100, 100, 100))
