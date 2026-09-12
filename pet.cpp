@@ -483,24 +483,44 @@ void Pet::playResult(uint8_t score) {
   save();
 }
 
-// saco de entrenamiento: los golpes entrenan la fuerza. Devuelve la subida.
-uint8_t Pet::trainStrength(uint16_t hits) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
-  uint8_t gain = hits / 4;          // ~4 golpes = 1 punto de entrenamiento
-  if (gain > 18) gain = 18;         // tope por sesion: la FUE se forja a fuego lento
-  uint8_t v = trAtk + gain;
-  trAtk = v > 100 ? 100 : v;
-  energy = dropTo(energy, 12, 5);   // cansa
-  fullness = dropTo(fullness, 5, 5);
-  int burn = (int)weight - hits / 3;  // tambien quema peso
-  weight = burn > 0 ? burn : 0;
-  joy = clamp100(joy + 6);
-  if (hits >= 20) heartUntil = millis() + HEART_MS;
-  if (hits > strHi) strHi = hits;   // record de golpes
-  addBond(2);
+// Kosten eines Kampfes, nach BATTLE_SPEC 6.7 in jedem Fall faellig,
+// unabhaengig vom Ausgang. Energie regeneriert nur im Schlaf, daraus ergibt
+// sich der Rhythmus "vier, fuenf Kaempfe, dann ein Nickerchen".
+void Pet::battleCost() {
+  if (ceremony != CER_NONE || isEgg()) return;
+  energy = dropTo(energy, 15, 5);
+  fullness = dropTo(fullness, 8, 5);
+  hygiene = dropTo(hygiene, 5, 5);
+  save();
+}
+
+// Sieg nach 6.7: Freude, Bindung und ein Trainingspunkt auf einen zufaellig
+// gewaehlten Kampfwert. Damit bleibt der ATK-Pfad erhalten, den vorher das
+// Sackhauen bedient hat - nur breiter, weil auch DEF und SPD dran kommen.
+// Kein Care-Slip-up, wie 6.7 es ausdruecklich festhaelt.
+void Pet::battleWin() {
+  if (ceremony != CER_NONE || isEgg()) return;
+  joy = clamp100(joy + 8);
+  addBond(1);
+  uint8_t *stat = nullptr;
+  switch (random(3)) {
+    case 0: stat = &trAtk; break;
+    case 1: stat = &trDef; break;
+    default: stat = &trSpe; break;
+  }
+  if (*stat < 100) (*stat)++;
+  heartUntil = millis() + HEART_MS;
   registerCare();
   save();
-  return gain;
+}
+
+// Niederlage nach 6.7: kostet nur Freude. Kein Care-Slip-up - Slip-ups
+// verzoegern die Entwicklung und kuehlen die Bindung, und Kaempfen darf nicht
+// bestrafen, was Pflege belohnt.
+void Pet::battleLoss() {
+  if (ceremony != CER_NONE || isEgg()) return;
+  joy = joy > 5 ? joy - 5 : 0;
+  save();
 }
 
 void Pet::play() {

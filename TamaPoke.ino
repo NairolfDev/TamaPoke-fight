@@ -85,13 +85,17 @@ float hitX, hitY;             // ultimo golpe (anillo de impacto)
 uint32_t hitTime = 0;
 bool gameNewHi = false;
 
-// saco de entrenamiento (entrena la fuerza)
-bool sackOpen = false;
-uint32_t sackUntil = 0, sackOverUntil = 0;
-uint16_t sackHits = 0;
-float sackShake = 0;
-uint8_t sackGain = 0;
-bool sackNewHi = false;
+// freier Kampf (BATTLE_SPEC 6): ersetzt das fruehere Sackhauen
+bool battleOpen = false;
+PmdMon foePmd;              // Sprite des Gegners, nur im Kampf geladen
+Fighter btPl, btFo;
+uint8_t btOutcome = BR_ONGOING;
+uint8_t btRound = 0;
+char btMsg[28] = "";        // Ereignistext unter dem Gegner
+uint32_t btMsgUntil = 0;
+uint32_t btOverUntil = 0;   // Ergebnisschirm
+uint8_t btActPl = PMD_IDLE, btActFo = PMD_IDLE;
+uint32_t btActUntil = 0;
 
 // las 9 especies con sprite propio en flash (respaldo sin SD): dex -> indice
 int flashIdxForDex(int16_t dex) {
@@ -304,7 +308,7 @@ void loop() {
   // 85 ms en juego/saco: margen seguro para que el redibujado no pise el envio
   // DMA del frame anterior (a 40-65 ms solapaba y causaba flashes negros; con
   // sprites grandes el dibujo tarda mas, asi que se deja colchon)
-  if (now - lastRender >= (uint32_t)((gameOpen || sackOpen) ? 85 : 100)) {
+  if (now - lastRender >= (uint32_t)((gameOpen || battleOpen) ? 85 : 100)) {
     lastRender = now;
     render();
   }
@@ -593,17 +597,6 @@ void handleTouch() {
   int16_t x, y;
   bool pressed = touch.getPoint(&x, &y, 1) > 0;
 
-  // saco de entrenamiento: cada toque cuenta al instante (aporrear rapido)
-  if (sackOpen) {
-    if (pressed && !wasPressed) {
-      lastInteract = millis();
-      if (y < 72) sackOpen = false;  // tocar arriba = abandonar
-      else sackTap();
-    }
-    wasPressed = pressed;
-    return;
-  }
-
   if (pressed && !wasPressed) {  // empieza el gesto
     tX0 = tXl = x;
     tY0 = tYl = y;
@@ -640,7 +633,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || kbOpen || sackOpen || pet.ceremony) return;
+  if (gameOpen || galleryOpen || kbOpen || battleOpen || pet.ceremony) return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -704,6 +697,10 @@ void onTap(int16_t x, int16_t y) {
     }
     return;
   }
+  if (battleOpen) {  // Kampf hat Vorrang: nur seine eigenen Buttons
+    battleTap(x, y);
+    return;
+  }
   if (galleryOpen) {
     galleryTap(x, y);
     return;
@@ -721,7 +718,7 @@ void onTap(int16_t x, int16_t y) {
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
       cardOpen = false;            // boton ENTRENAR FUERZA
-      startSack();
+      startBattle();
     } else {
       cardOpen = false;
     }
@@ -960,8 +957,8 @@ void render() {
     renderGame();
     return;
   }
-  if (sackOpen) {
-    renderSack();
+  if (battleOpen) {
+    renderBattle();
     return;
   }
   if (kbOpen) {
@@ -1169,103 +1166,297 @@ void stepGame() {
   gamePetX += chase;
 }
 
-// ---------- saco de entrenamiento (entrena la fuerza) ----------
+// ---------- freier Kampf (BATTLE_SPEC 6 und 8) ----------
+//
+// Ersetzt das Sackhauen. Der ATK-Pfad bleibt erhalten, weil jeder Sieg nach
+// 6.7 einen Trainingspunkt gibt (Pet::battleWin).
+//
+// Geometrie auf dem runden Screen (Mitte 233/233, Radius 231). Die
+// Attackenreihe ist der engste Fall: bei y 382 betraegt die nutzbare
+// Halbbreite sqrt(231^2 - 149^2) = 224, die Reihe liegt mit x 66..400 also
+// innerhalb. Ecke unten links (66, 382) hat Abstand 224, unten rechts
+// genauso - beide unter 231.
+#define BT_ROW_X0 66
+#define BT_ROW_X1 400
+#define BT_ROW_Y 330
+#define BT_ROW_H 52
+#define BT_ROW_GAP 6
+#define BT_FLEE_X 300
+#define BT_FLEE_Y 296
+#define BT_FLEE_W 100
+#define BT_FLEE_H 28
 
-void startSack() {
-  if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
-  sackOpen = true;
-  sackUntil = millis() + 10000;
-  sackOverUntil = 0;
-  sackHits = 0;
-  sackShake = 0;
-  sackNewHi = false;
+void drawGameScene();  // Prototyp (weiter unten definiert)
+
+// Tageszeit-Gewichtung nach 6.3. Die Typen stehen hier und nicht in
+// battle.cpp: die Engine kennt die Uhr nicht.
+static const uint8_t BT_TY_DAY[] = { T_NORMAL, T_GRASS, T_BUG, T_FLYING };
+static const uint8_t BT_TY_DUSK[] = { T_POISON, T_GROUND, T_ROCK };
+static const uint8_t BT_TY_NIGHT[] = { T_GHOST, T_PSYCHIC, T_ICE };
+
+// Lage und Breite eines Attackenbuttons. So viele Buttons wie Attacken -
+// keine ausgegrauten Platzhalter, siehe 8. Bei einer Attacke ein breiter
+// Button, bei vier die schmale Viererreihe.
+static void btSlotRect(uint8_t i, uint8_t n, int *x, int *w) {
+  int total = BT_ROW_X1 - BT_ROW_X0;
+  int bw = (total - (n - 1) * BT_ROW_GAP) / n;
+  *w = bw;
+  *x = BT_ROW_X0 + i * (bw + BT_ROW_GAP);
 }
 
-void sackTap() {
-  if (millis() >= sackUntil) return;  // ya termino el tiempo
-  sackHits++;
-  sackShake = 16;  // sacude el saco
+static uint16_t btBarColor(uint16_t hp, uint16_t max) {
+  uint32_t pct = max ? (uint32_t)hp * 100 / max : 0;
+  if (pct <= 20) return UI_BAR_BAD;
+  if (pct <= 50) return UI_BAR_WARN;
+  return UI_BAR_OK;
 }
 
-void drawGameScene();  // prototipo (definida mas abajo)
+static void btDrawBar(int x, int y, int w, int h, uint16_t hp, uint16_t max) {
+  gfx->fillRoundRect(x, y, w, h, h / 2, UI_TRACK);
+  int fw = max ? (int)((uint32_t)w * hp / max) : 0;
+  if (fw > h) gfx->fillRoundRect(x, y, fw, h, h / 2, btBarColor(hp, max));
+}
 
-void renderSack() {
+static void btSetMsg(const char *s) {
+  snprintf(btMsg, sizeof(btMsg), "%s", s);
+  btMsgUntil = millis() + 1400;
+}
+
+// Ereignisse der Runde in Text, Animation und Ton uebersetzen. Die Engine
+// selbst zeichnet nichts, sie liefert nur BattleEvent.
+static void btApplyEvents(BattleEvent *ev, uint8_t n) {
   uint32_t now = millis();
-  drawGameScene();  // fondo del habitat
+  for (uint8_t i = 0; i < n; i++) {
+    const BattleEvent &e = ev[i];
+    bool mine = (e.actor == 0);
+    if (e.berry) continue;
+    if (e.skipped || e.missed || e.stageOnly) continue;
+
+    // Angreifer schlaegt zu, Ziel zuckt (nur wenn der Sprite die Aktion hat)
+    if (mine) {
+      if (pmd.has(PMD_ATTACK)) btActPl = PMD_ATTACK;
+      if (foePmd.has(PMD_HURT) && e.damage) btActFo = PMD_HURT;
+    } else {
+      if (foePmd.has(PMD_ATTACK)) btActFo = PMD_ATTACK;
+      if (pmd.has(PMD_HURT) && e.damage) btActPl = PMD_HURT;
+    }
+    btActUntil = now + 420;
+
+    if (e.crit) { btSetMsg(T(S_BT_CRIT)); sfxPlay(SFX_MEDAL); }
+    else if (e.effMult == 0) { btSetMsg(T(S_BT_NONE)); sfxPlay(SFX_DENY); }
+    else if (e.effMult > 4) { btSetMsg(T(S_BT_SUPER)); sfxPlay(SFX_PLAY); }
+    else if (e.effMult < 4) { btSetMsg(T(S_BT_WEAK)); sfxPlay(SFX_PLAY); }
+    else sfxPlay(SFX_PLAY);
+  }
+}
+
+// Kosten und Belohnungen nach 6.7. XP, lossStreak und Levelaufstieg kommen
+// erst mit Phase 5 - die Felder aus 5.4 gibt es noch nicht.
+static void btFinish(uint8_t res) {
+  pet.battleCost();  // in jedem Fall: -15 ENE, -8 FOOD, -5 HYG
+  if (res == BR_WIN) {
+    pet.battleWin();
+    if (pmd.has(PMD_POSE)) btActPl = PMD_POSE;
+    btActUntil = millis() + 1600;
+    sfxPlay(SFX_LEVEL);
+  } else if (res == BR_LOSS) {
+    pet.battleLoss();
+    sfxPlay(SFX_BYE);
+  }
+  btOverUntil = millis() + 2600;
+}
+
+void startBattle() {
+  if (pet.isEgg() || pet.sleeping || pet.ceremony) return;  // 6.5
+
+  int hh = sceneHour();
+  const uint8_t *want;
+  uint8_t nWant;
+  if (hh < 6 || hh >= 20) { want = BT_TY_NIGHT; nWant = 3; }
+  else if (hh < 8 || hh >= 18) { want = BT_TY_DUSK; nWant = 3; }
+  else { want = BT_TY_DAY; nWant = 4; }
+
+  uint8_t biome = DEX_TBL[pet.speciesId].biome;
+  uint16_t dex = pickWildDexWeighted((int8_t)biome, want, nWant);
+  bool shiny = random(64) == 0;  // 6.3: Shiny-Gegner 1 zu 64
+
+  fighterFromPet(btPl, pet);
+  fighterFromDex(btFo, dex, pickFoeLevel(btPl.level, 2), shiny, false);
+
+  // CLAUDE.md: vor dem Laden eines neuen Sprite-Slots das PSRAM pruefen.
+  // Ein PMD-Sprite kostet bis zu ~220 KB; ohne Reserve lieber ohne Bild
+  // kaempfen als eine Allokation platzen lassen.
+  foePmd.unload();
+  if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) > 512 * 1024)
+    foePmd.load((uint8_t)dex, shiny);
+
+  btOutcome = BR_ONGOING;
+  btRound = 0;
+  btMsg[0] = 0;
+  btMsgUntil = 0;
+  btOverUntil = 0;
+  btActPl = btActFo = PMD_IDLE;
+  btActUntil = 0;
+  battleOpen = true;
+  // 6.5: Erschoepfung sperrt nicht, sie kostet 25 % ATK und SPD
+  if (btPl.exhausted) btSetMsg(T(S_BT_EXHAUSTED));
+  sfxPlay(SFX_TAP);
+}
+
+static void btClose() {
+  battleOpen = false;
+  foePmd.unload();  // PSRAM sofort wieder freigeben
+}
+
+// Eine Runde ausfuehren. slot ist der Attackenindex oder SLOT_STRUGGLE.
+static void btRunRound(int8_t slot) {
+  if (btOutcome != BR_ONGOING || btOverUntil) return;
+  BattleEvent ev[BATTLE_MAX_EVENTS];
+  uint8_t n = 0;
+  btRound++;
+  btOutcome = battleRound(btPl, btFo, slot, AI_WILD, ev, &n);
+  btApplyEvents(ev, n);
+  if (btOutcome == BR_ONGOING && btRound >= BATTLE_MAX_ROUNDS) {
+    // 6.4: nach 30 Runden gewinnt, wer prozentual mehr HP uebrig hat
+    uint32_t p = (uint32_t)btPl.hp * 100 / btPl.maxHp;
+    uint32_t f = (uint32_t)btFo.hp * 100 / btFo.maxHp;
+    btOutcome = p > f ? BR_WIN : (p < f ? BR_LOSS : BR_DRAW);
+  }
+  if (btOutcome != BR_ONGOING) btFinish(btOutcome);
+}
+
+void renderBattle() {
+  uint32_t now = millis();
+  drawGameScene();
   bool night = sceneHour() < 6 || sceneHour() >= 20;
   uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
 
-  // pantalla de resultado
-  if (sackOverUntil) {
-    if (now > sackOverUntil) { sackOpen = false; return; }
-    char b[20];
-    snprintf(b, sizeof(b), T(S_HITS_FMT), sackHits);
+  if (btActUntil && now > btActUntil) {
+    btActPl = btActFo = PMD_IDLE;
+    btActUntil = 0;
+  }
+
+  // Ergebnisschirm
+  if (btOverUntil) {
+    if (now > btOverUntil) { btClose(); return; }
+    const char *t = btOutcome == BR_WIN ? T(S_GREAT)
+                    : btOutcome == BR_LOSS ? T(S_SAD) : T(S_BATTLE);
     gfx->setTextColor(ink);
-    gfx->setTextSize(4);
-    gfx->setCursor(CX - strlen(b) * 12, 150);
-    gfx->print(b);
-    char g[18];
-    snprintf(g, sizeof(g), T(S_STR_GAIN_FMT), sackGain);
-    gfx->setTextColor(UI_BAR_BAD);
     gfx->setTextSize(3);
-    gfx->setCursor(CX - strlen(g) * 9, 210);
-    gfx->print(g);
-    gfx->setTextSize(2);
-    if (sackNewHi && sackHits > 0) {
-      gfx->setTextColor(UI_BAR_WARN);
-      gfx->setCursor(CX - strlen(T(S_NEW_RECORD)) * 6, 256);
-      gfx->print(T(S_NEW_RECORD));
-    } else {
-      char r[18];
-      snprintf(r, sizeof(r), T(S_RECORD_FMT), pet.strHi);
-      gfx->setTextColor(ink);
-      gfx->setCursor(CX - strlen(r) * 6, 256);
-      gfx->print(r);
-    }
+    gfx->setCursor(CX - strlen(t) * 9, 210);
+    gfx->print(t);
     gfx->flush();
     return;
   }
 
-  // se acabaron los 10 s: aplicar entrenamiento
-  if (now >= sackUntil) {
-    sackNewHi = (sackHits > pet.strHi);
-    sackGain = pet.trainStrength(sackHits);
-    sfxPlay(sackNewHi ? SFX_MEDAL : SFX_PLAY);
-    sackOverUntil = now + 3500;
-    gfx->flush();
-    return;
-  }
-
-  // aporreo activo
-  sackShake *= 0.84f;
-  int off = (int)(sackShake * sinf(now * 0.05f));
-  int sx = CX + off, top = 86, sy = 150;
-  gfx->fillRect(CX - 3, 56, 6, top - 56, ink);          // gancho/cuerda
-  gfx->fillRect(sx - 4, top - 30, 8, 34, ink);          // cadena
-  gfx->fillRoundRect(sx - 42, top, 84, 150, 26, C565(0xb5, 0x3a, 0x3a));  // saco
-  gfx->fillRoundRect(sx - 42, top, 84, 22, 18, C565(0x7e, 0x28, 0x28));   // tapa
-  gfx->drawRoundRect(sx - 42, top, 84, 150, 26, ink);
-  gfx->fillRect(sx - 42, top + 70, 84, 4, C565(0x7e, 0x28, 0x28));        // costura
-
-  // contador de golpes
-  char buf[8];
-  snprintf(buf, sizeof(buf), "%u", sackHits);
+  // Gegner: oben rechts, leicht verkleinert, HP-Balken darueber
+  char hdr[26];
+  snprintf(hdr, sizeof(hdr), "%s Nv.%u", DEX_TBL[btFo.dex].name, btFo.level);
   gfx->setTextColor(ink);
-  gfx->setTextSize(6);
-  gfx->setCursor(CX - strlen(buf) * 18, 268);
-  gfx->print(buf);
+  gfx->setTextSize(1);
+  gfx->setCursor(327 - strlen(hdr) * 3, 76);
+  gfx->print(hdr);
+  if (btFo.shiny) {
+    gfx->setTextColor(UI_BAR_WARN);
+    gfx->setCursor(406, 76);
+    gfx->print("*");
+  }
+  btDrawBar(252, 96, 150, 12, btFo.hp, btFo.maxHp);
+  if (foePmd.loaded) {
+    uint8_t act = foePmd.has(btActFo) ? btActFo : PMD_IDLE;
+    drawPmdActM(foePmd, act, 312, 186, now, true, false, 4);
+  }
 
-  gfx->setTextSize(2);
-  gfx->setCursor(CX - strlen(T(S_HIT_FAST)) * 6, 322);
-  gfx->print(T(S_HIT_FAST));
+  // Eigenes Pokemon: unten links, HP-Balken darunter
+  if (pmd.loaded) {
+    uint8_t act = pmd.has(btActPl) ? btActPl : PMD_IDLE;
+    drawPmdAct(act, 140, 292, now, true, false, 5);
+  }
+  btDrawBar(58, 298, 150, 12, btPl.hp, btPl.maxHp);
 
-  // barra de tiempo
-  uint32_t left = sackUntil - now;
-  int bw = 280, fw = (int)((uint32_t)bw * left / 10000);
-  gfx->fillRoundRect(CX - bw / 2, 350, bw, 16, 5, UI_TRACK);
-  if (fw > 2) gfx->fillRoundRect(CX - bw / 2, 350, fw, 16, 5, UI_BAR_OK);
+  // Ereignistext unter dem Gegner
+  if (btMsgUntil && now < btMsgUntil && btMsg[0]) {
+    gfx->setTextColor(ink);
+    gfx->setTextSize(2);
+    gfx->setCursor(CX - strlen(btMsg) * 6, 216);
+    gfx->print(btMsg);
+  }
+
+  // Attackenbuttons: so viele wie Attacken. Sind alle AP leer, bleibt genau
+  // ein Verzweifler-Button - die Engine faellt ohnehin darauf zurueck.
+  uint8_t usable = 0;
+  for (uint8_t i = 0; i < btPl.moveCount; i++)
+    if (btPl.pp[i] > 0) usable++;
+  uint8_t n = usable ? btPl.moveCount : 1;
+  for (uint8_t i = 0; i < n; i++) {
+    int x, w;
+    btSlotRect(i, n, &x, &w);
+    uint8_t mv = usable ? btPl.moves[i] : MOVE_STRUGGLE;
+    bool dead = usable && btPl.pp[i] == 0;
+    uint16_t acc = TYPE_ACCENT[MOVE_TBL[mv].type];
+    gfx->fillRoundRect(x, BT_ROW_Y, w, BT_ROW_H, 12,
+                       dead ? UI_TRACK : lerp565(acc, UI_WHITE, 5, 8));
+    gfx->drawRoundRect(x, BT_ROW_Y, w, BT_ROW_H, 12, dead ? UI_TRACK : acc);
+    // Label so gross wie es passt, notfalls gekuerzt. Die laengsten
+    // Attackennamen sprengen bei vier Buttons jede Groesse: "PATADA SALTO
+    // ALTA" braucht 102 px in einem 79 px breiten Button. Ein Zeichen ist
+    // 6 px breit bei size 1, 12 px bei size 2.
+    char lbl[24];
+    snprintf(lbl, sizeof(lbl), "%s", moveName(mv));
+    int avail = w - 8;
+    uint8_t ts = ((int)strlen(lbl) * 12 <= avail) ? 2 : 1;
+    int maxch = avail / (6 * ts);
+    if ((int)strlen(lbl) > maxch) lbl[maxch] = 0;
+    gfx->setTextColor(UI_INK);
+    gfx->setTextSize(ts);
+    gfx->setCursor(x + w / 2 - strlen(lbl) * 3 * ts, BT_ROW_Y + 12);
+    gfx->print(lbl);
+    char pp[12];
+    if (usable) snprintf(pp, sizeof(pp), "%u/%u", btPl.pp[i], MOVE_TBL[mv].maxPp);
+    else snprintf(pp, sizeof(pp), "--");
+    gfx->setTextSize(1);
+    gfx->setCursor(x + w / 2 - strlen(pp) * 3, BT_ROW_Y + 36);
+    gfx->print(pp);
+  }
+
+  // Fluchtbutton - nur im freien Kampf, in der Arena spaeter nicht
+  gfx->fillRoundRect(BT_FLEE_X, BT_FLEE_Y, BT_FLEE_W, BT_FLEE_H, 10, UI_TRACK);
+  gfx->drawRoundRect(BT_FLEE_X, BT_FLEE_Y, BT_FLEE_W, BT_FLEE_H, 10, ink);
+  gfx->setTextColor(ink);
+  gfx->setTextSize(1);
+  gfx->setCursor(BT_FLEE_X + BT_FLEE_W / 2 - strlen(T(S_BT_FLEE)) * 3,
+                 BT_FLEE_Y + 10);
+  gfx->print(T(S_BT_FLEE));
 
   gfx->flush();
+}
+
+void battleTap(int16_t x, int16_t y) {
+  if (btOverUntil) { btClose(); return; }
+
+  // Flucht: Kosten fallen nach 6.7 trotzdem an, Belohnung gibt es keine
+  if (x >= BT_FLEE_X && x <= BT_FLEE_X + BT_FLEE_W && y >= BT_FLEE_Y &&
+      y <= BT_FLEE_Y + BT_FLEE_H) {
+    pet.battleCost();
+    sfxPlay(SFX_DENY);
+    btClose();
+    return;
+  }
+
+  if (y < BT_ROW_Y || y > BT_ROW_Y + BT_ROW_H) return;
+  uint8_t usable = 0;
+  for (uint8_t i = 0; i < btPl.moveCount; i++)
+    if (btPl.pp[i] > 0) usable++;
+  uint8_t n = usable ? btPl.moveCount : 1;
+  for (uint8_t i = 0; i < n; i++) {
+    int bx, bw;
+    btSlotRect(i, n, &bx, &bw);
+    if (x < bx || x > bx + bw) continue;
+    if (!usable) { btRunRound(SLOT_STRUGGLE); sfxPlay(SFX_TAP); return; }
+    if (btPl.pp[i] == 0) { sfxPlay(SFX_DENY); return; }
+    btRunRound((int8_t)i);
+    return;
+  }
 }
 
 // fondo del minijuego: hatibat del bicho (cielo por hora + suelo del bioma)

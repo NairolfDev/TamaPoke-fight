@@ -99,6 +99,11 @@ uint8_t pickFoeLevel(uint8_t playerLevel, uint8_t spread);
 // gefiltert, sonst aus dem ganzen Dex.
 uint16_t pickWildDex(int8_t biome);
 
+// 6.3 mit Tageszeit-Gewichtung: bevorzugt Spezies, deren Typ in want steht,
+// faellt aber auf das ganze Biom zurueck, wenn keine passt. Die Engine kennt
+// die Uhr nicht - der Aufrufer uebergibt die Typen der Tageszeit.
+uint16_t pickWildDexWeighted(int8_t biome, const uint8_t *want, uint8_t nWant);
+
 // --- Rechnen --------------------------------------------------------------
 
 // 6.4: Schadensformel. roll ist 217..255, crit verdoppelt. Reine Funktion

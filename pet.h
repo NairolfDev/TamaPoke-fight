@@ -76,7 +76,11 @@ public:
     return !isEgg() && (speciesId % 3) == color;  // gusto oculto por especie
   }
   void playResult(uint8_t score);  // recompensa del minijuego (entrena VEL)
-  uint8_t trainStrength(uint16_t hits);  // saco de entrenamiento (entrena FUE)
+  // Kampf, BATTLE_SPEC 6.7. battleCost() ist in jedem Fall faellig,
+  // battleWin()/battleLoss() je nach Ausgang.
+  void battleCost();
+  void battleWin();
+  void battleLoss();
 
   // stats de combate: base real de gen 1 x genes + nivel + entrenamiento
   uint16_t atkStat() const;

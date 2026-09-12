@@ -127,6 +127,29 @@ uint16_t pickWildDex(int8_t biome) {
   return cand[random(n)];
 }
 
+uint16_t pickWildDexWeighted(int8_t biome, const uint8_t *want, uint8_t nWant) {
+  if (!want || nWant == 0) return pickWildDex(biome);
+  // Zu 60 % einen Typ der Tageszeit erzwingen. Keine harte Filterung: 6.3
+  // nennt es "gewichtete Typen", und in manchen Biomen gaebe es sonst
+  // ueberhaupt keinen Gegner.
+  if (random(100) < 60) {
+    uint16_t cand[DEX_COUNT];
+    uint16_t n = 0;
+    for (uint16_t d = 1; d <= DEX_COUNT; d++) {
+      if (DEX_TBL[d].rarity == R_LEGENDARIO) continue;
+      if (biome >= 0 && DEX_TBL[d].biome != (uint8_t)biome) continue;
+      for (uint8_t w = 0; w < nWant; w++) {
+        if (DEX_TBL[d].type1 == want[w] || DEX_TBL[d].type2 == want[w]) {
+          cand[n++] = d;
+          break;
+        }
+      }
+    }
+    if (n > 0) return cand[random(n)];
+  }
+  return pickWildDex(biome);
+}
+
 // --- Schaden --------------------------------------------------------------
 
 uint16_t battleDamage(const Fighter &a, const Fighter &d, uint8_t move,

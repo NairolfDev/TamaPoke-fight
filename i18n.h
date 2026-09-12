@@ -38,7 +38,7 @@ enum StrId : uint8_t {
   // Stimmungstext S_EXHAUSTED weiter oben - der ist ein Satz in
   // Gemischtschreibung ("Erschoepft..."), hier braucht es ein Label in
   // ASCII-Grossbuchstaben.
-  S_BT_SUPER, S_BT_CRIT, S_BT_WEAK, S_BT_NONE, S_BT_EXHAUSTED,
+  S_BT_SUPER, S_BT_CRIT, S_BT_WEAK, S_BT_NONE, S_BT_EXHAUSTED, S_BT_FLEE,
   // ficha: medallas
   S_MEDALS_FMT, S_BACK,
   // teclado y galeria
