@@ -448,7 +448,7 @@ def _wants_berry(c):
     return c.berry_left > 0 and c.hp_pct() < 30
 
 
-def run_battle(player, foe, rng, player_ai=AI_ELITE, foe_ai=AI_ELITE,
+def run_battle(player, foe, rng, player_ai=AI_ELITE, foe_ai=AI_WILD,
                log=None):
     """Fuehrt einen Kampf aus. Liefert ('win'|'loss'|'draw', Rundenzahl)
     aus Sicht des Spielers."""
@@ -555,10 +555,15 @@ def make_foe(dex, level, grudge=False):
 
 
 def simulate(n, level, rng, bond=0, energy=100, berry=False,
-             player_ai=AI_ELITE, foe_ai=AI_ELITE, player_dex=None,
+             player_ai=AI_ELITE, foe_ai=AI_WILD, player_dex=None,
              foe_dex=None, spread=0):
     """spread 0 = gleichstufige Gegner, wie die Abnahme aus Phase 10 es
-    verlangt. spread 2 ist die echte Begegnung aus 6.3."""
+    verlangt. spread 2 ist die echte Begegnung aus 6.3.
+
+    Die Vorgaben fuer player_ai und foe_ai sind absichtlich dieselben wie die
+    der CLI (--player-ai elite, --ai wild). Wichen sie ab, liefert ein Aufruf
+    ohne Argumente eine andere Quote als der dokumentierte Standardlauf - und
+    genau so entstehen Referenzzahlen, die nicht zu BSIM passen."""
     tally = {'win': 0, 'loss': 0, 'draw': 0}
     rounds_total = 0
     timeouts = 0
