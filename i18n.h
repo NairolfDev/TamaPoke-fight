@@ -4,7 +4,10 @@
 // Idiomas soportados. La fuente del firmware no tiene acentos: ambos textos van
 // sin tildes ni enes (igual que ya iba el espanol).
 enum Lang : uint8_t { LANG_ES = 0, LANG_EN, LANG_FR, LANG_DE, LANG_IT, LANG_PT, LANG_COUNT };
-#define LANG_DEFAULT LANG_EN  // idioma por defecto: ingles
+// Standardsprache: Deutsch (BATTLE_SPEC 9). i18n.cpp liest
+// prefs.getUChar("lang", LANG_DEFAULT) - bestehende Geraete behalten damit
+// ihre Einstellung, nur Neuinstallationen starten deutsch.
+#define LANG_DEFAULT LANG_DE
 
 extern Lang gLang;  // idioma activo (definido en i18n.cpp)
 
@@ -40,6 +43,8 @@ enum StrId : uint8_t {
   // ASCII-Grossbuchstaben.
   S_BT_SUPER, S_BT_CRIT, S_BT_WEAK, S_BT_NONE, S_BT_EXHAUSTED, S_BT_FLEE,
   S_BT_READY,  // 4.4: offene Stufe, der naechste Sieg ist der Aufstieg
+  // 5.3: Lerndialog beim Aufstieg, wenn alle vier Slots belegt sind
+  S_LEARN_Q, S_LEARN_SKIP,
   // ficha: medallas
   S_MEDALS_FMT, S_BACK,
   // teclado y galeria

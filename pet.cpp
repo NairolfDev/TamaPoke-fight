@@ -1,6 +1,8 @@
 #include "pet.h"
 #include "dex.h"
 #include "audio.h"
+#include "moves.h"  // movesForLevel, newMoveAt, MOVE_TBL (nur hier, nicht in pet.h:
+                    // sonst bekommt jede Uebersetzungseinheit die Attackentabellen)
 
 void Pet::begin() {
   prefs.begin("tamapoke", false);
@@ -415,6 +417,7 @@ void Pet::hatch() {
   // ...) - ohne diese Zeile koennten die sich nie verabschieden, weil
   // canFarewellNow() ein gesetztes finalFormAt verlangt.
   if (DEX_TBL[speciesId].evolvesTo == 0) finalFormAt = ageMinutes;
+  syncMoves();       // 5.3: Startattacken aus dem Learnset
   checkMedals();     // por si nace ya en forma final (legendario)
   sfxPlay(SFX_HATCH);
   save();
@@ -553,6 +556,19 @@ void Pet::levelUp() {
   uint16_t need = lvlReq();
   xpMinutes = xpMinutes >= need ? xpMinutes - need : 0;
   levelsWon++;
+  // 5.3: steht auf diesem Level eine neue Attacke an? Kennt das Pokemon
+  // sie schon, passiert nichts. Sonst rutscht sie in einen freien Slot -
+  // oder die UI raeumt sie ueber den Lerndialog ab.
+  uint8_t nm = newMoveAt(speciesId, level());
+  if (nm && !knowsMove(nm)) {
+    int8_t slot = freeMoveSlot();
+    if (slot >= 0) {
+      moves[slot] = nm;
+      pp[slot] = MOVE_TBL[nm].maxPp;
+    } else {
+      pendingMove = nm;  // alle vier belegt: der Spieler entscheidet
+    }
+  }
   sfxPlay(SFX_LEVEL);
   checkMedals();  // MED_LV10 / LV25 / LV50 haengen am Level
   save();
@@ -567,6 +583,37 @@ void Pet::addBattleXp(uint8_t foeLevel) {
   uint16_t need = lvlReq();
   uint32_t v = xpMinutes + gain;
   xpMinutes = v > need ? need : (uint32_t)v;  // friert bei lvlReq() ein
+  save();
+}
+
+// 5.3: Slots aus dem Learnset fuellen - beim Schluepfen und bei der
+// Migration. Beim Entwickeln NICHT: da bleiben die Attacken erhalten.
+void Pet::syncMoves() {
+  for (uint8_t i = 0; i < 4; i++) moves[i] = pp[i] = 0;
+  pendingMove = 0;
+  if (isEgg()) return;
+  uint8_t out[MOVE_SLOTS];
+  uint8_t n = movesForLevel(speciesId, level(), out);
+  for (uint8_t i = 0; i < n && i < 4; i++) {
+    moves[i] = out[i];
+    pp[i] = MOVE_TBL[out[i]].maxPp;
+  }
+}
+
+// 6.7: AP fuellen sich beim Aufwachen komplett auf. Zwischen zwei Kaempfen
+// bleiben sie dagegen stehen - daraus ergibt sich der Rhythmus.
+void Pet::refillPp() {
+  for (uint8_t i = 0; i < 4; i++)
+    if (moves[i]) pp[i] = MOVE_TBL[moves[i]].maxPp;
+}
+
+// 5.3: Attacke in einen Slot legen. Ist der Slot belegt, wird vergessen und
+// ersetzt - die Entscheidung trifft der Spieler im Dialog.
+void Pet::learnMove(uint8_t mv, int8_t slot) {
+  if (!mv || slot < 0 || slot > 3) return;
+  moves[slot] = mv;
+  pp[slot] = MOVE_TBL[mv].maxPp;
+  if (pendingMove == mv) pendingMove = 0;
   save();
 }
 
@@ -596,6 +643,7 @@ void Pet::migrate() {
   // die Phase je gesehen hat.
   finalFormAt = (!isEgg() && DEX_TBL[speciesId].evolvesTo == 0) ? ageMinutes : 0;
 
+  syncMoves();  // 5.4: Attacken aus dem Learnset nachziehen
   nvsVer = NVS_VER;
   Serial.printf("nvs 1 -> %u: levelsWon=%u finalFormAt=%u\n", NVS_VER,
                 levelsWon, finalFormAt);
@@ -618,6 +666,7 @@ void Pet::toggleLight() {
   if (ceremony != CER_NONE) return;
   if (isEgg()) return;
   sleeping = !sleeping;
+  if (!sleeping) refillPp();  // 6.7: AP sind nach dem Schlaf wieder voll
   save();
 }
 

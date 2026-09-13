@@ -96,6 +96,7 @@ uint32_t btMsgUntil = 0;
 uint32_t btOverUntil = 0;   // Ergebnisschirm
 uint8_t btActPl = PMD_IDLE, btActFo = PMD_IDLE;
 uint32_t btActUntil = 0;
+bool learnOpen = false;  // 5.3: Lerndialog offen
 
 // las 9 especies con sprite propio en flash (respaldo sin SD): dex -> indice
 int flashIdxForDex(int16_t dex) {
@@ -263,6 +264,12 @@ void loop() {
   bool runReady = pet.canRunawayNow();
   if (runReady && !wasRunReady) sfxPlay(SFX_DENY);
   wasRunReady = runReady;
+
+  // 5.3: steht eine Attacke an und alle Slots sind belegt, entscheidet
+  // der Spieler - sobald kein anderer Schirm mehr davorliegt
+  if (pet.pendingMove && !battleOpen && !learnOpen && !pet.ceremony &&
+      !pet.awaitingStarter())
+    learnOpen = true;
 
   handleTouch();
   handleSerial();
@@ -635,7 +642,9 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || kbOpen || battleOpen || pet.ceremony) return;
+  if (gameOpen || galleryOpen || kbOpen || battleOpen || learnOpen ||
+      pet.ceremony)
+    return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -697,6 +706,10 @@ void onTap(int16_t x, int16_t y) {
         break;
       }
     }
+    return;
+  }
+  if (learnOpen) {
+    learnTap(x, y);
     return;
   }
   if (battleOpen) {  // Kampf hat Vorrang: nur seine eigenen Buttons
@@ -957,6 +970,10 @@ void render() {
   }
   if (gameOpen) {
     renderGame();
+    return;
+  }
+  if (learnOpen) {  // 5.3: erst entscheiden, dann weiterspielen
+    renderLearn();
     return;
   }
   if (battleOpen) {
@@ -1254,7 +1271,14 @@ static void btApplyEvents(BattleEvent *ev, uint8_t n) {
 
 // Kosten und Belohnungen nach 6.7. XP, lossStreak und Levelaufstieg kommen
 // erst mit Phase 5 - die Felder aus 5.4 gibt es noch nicht.
+// 6.7: AP bleiben zwischen Kaempfen stehen - voll werden sie erst beim
+// Aufwachen (Pet::refillPp). Deshalb vor jedem Speichern zurueckschreiben.
+static void btSavePp() {
+  for (uint8_t i = 0; i < MOVE_SLOTS; i++) pet.pp[i] = btPl.pp[i];
+}
+
 static void btFinish(uint8_t res) {
+  btSavePp();
   pet.battleCost();  // in jedem Fall: -15 ENE, -8 FOOD, -5 HYG
   if (res == BR_WIN) {
     // 4.2/4.3: ist eine Stufe offen, IST dieser Sieg der Aufstieg. Sonst
@@ -1439,12 +1463,85 @@ void renderBattle() {
   gfx->flush();
 }
 
+// ---------- Lerndialog (BATTLE_SPEC 5.3) ----------
+//
+// Beim Aufstieg steht eine neue Attacke an und alle vier Slots sind belegt:
+// vergessen und ersetzen oder ablehnen. Der Spieler entscheidet und sieht zu,
+// genau wie bei Entwicklung und Abschied.
+//
+// Fuenf Zeilen a 48 px ab y 108, Abstand 6 - die unterste endet bei 372, alle
+// Ecken liegen mit maximal 214 innerhalb des Radius 231.
+#define LRN_X 70
+#define LRN_W 326
+#define LRN_Y 108
+#define LRN_H 48
+#define LRN_GAP 6
+
+static int lrnRowY(uint8_t i) { return LRN_Y + i * (LRN_H + LRN_GAP); }
+
+void renderLearn() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+
+  char q[30];
+  snprintf(q, sizeof(q), "%s %s", moveName(pet.pendingMove), T(S_LEARN_Q));
+  gfx->setTextColor(UI_INK);
+  gfx->setTextSize(2);
+  gfx->setCursor(CX - (int)strlen(q) * 6, 72);
+  gfx->print(q);
+
+  for (uint8_t i = 0; i < 4; i++) {
+    uint8_t mv = pet.moves[i];
+    uint16_t acc = TYPE_ACCENT[MOVE_TBL[mv].type];
+    int ry = lrnRowY(i);
+    gfx->fillRoundRect(LRN_X, ry, LRN_W, LRN_H, 12, lerp565(acc, UI_WHITE, 5, 8));
+    gfx->drawRoundRect(LRN_X, ry, LRN_W, LRN_H, 12, acc);
+    gfx->setTextColor(UI_INK);
+    gfx->setTextSize(2);
+    gfx->setCursor(LRN_X + 16, ry + 16);
+    gfx->print(moveName(mv));
+    char pp[14];
+    snprintf(pp, sizeof(pp), "AP %u/%u", pet.pp[i], MOVE_TBL[mv].maxPp);
+    gfx->setTextSize(1);
+    gfx->setCursor(LRN_X + LRN_W - 16 - (int)strlen(pp) * 6, ry + 22);
+    gfx->print(pp);
+  }
+
+  int ry = lrnRowY(4);
+  gfx->fillRoundRect(LRN_X, ry, LRN_W, LRN_H, 12, UI_TRACK);
+  gfx->drawRoundRect(LRN_X, ry, LRN_W, LRN_H, 12, UI_INK);
+  gfx->setTextColor(UI_INK);
+  gfx->setTextSize(2);
+  gfx->setCursor(CX - (int)strlen(T(S_LEARN_SKIP)) * 6, ry + 16);
+  gfx->print(T(S_LEARN_SKIP));
+
+  gfx->flush();
+}
+
+void learnTap(int16_t x, int16_t y) {
+  if (x < LRN_X || x > LRN_X + LRN_W) return;
+  for (uint8_t i = 0; i < 5; i++) {
+    int ry = lrnRowY(i);
+    if (y < ry || y > ry + LRN_H) continue;
+    if (i < 4) {
+      pet.learnMove(pet.pendingMove, (int8_t)i);  // vergessen und ersetzen
+      sfxPlay(SFX_MEDAL);
+    } else {
+      pet.pendingMove = 0;  // abgelehnt
+      sfxPlay(SFX_TAP);
+    }
+    learnOpen = false;
+    return;
+  }
+}
+
 void battleTap(int16_t x, int16_t y) {
   if (btOverUntil) { btClose(); return; }
 
   // Flucht: Kosten fallen nach 6.7 trotzdem an, Belohnung gibt es keine
   if (x >= BT_FLEE_X && x <= BT_FLEE_X + BT_FLEE_W && y >= BT_FLEE_Y &&
       y <= BT_FLEE_Y + BT_FLEE_H) {
+    btSavePp();  // verbrauchte AP bleiben auch bei Flucht verbraucht
     pet.battleCost();
     sfxPlay(SFX_DENY);
     btClose();

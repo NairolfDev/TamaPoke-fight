@@ -106,6 +106,25 @@ Neue Bedingung: **Endstufe seit mindestens einem Tag.** Neues Feld
 Prüfung `ageMinutes - finalFormAt >= 1440`. Damit bekommt jedes Pokémon seine
 Abschiedsphase, unabhängig davon, wie schnell es dort angekommen ist.
 
+**`finalFormAt` muss auch beim Schlüpfen gesetzt werden, nicht nur beim
+Entwickeln.** 25 der 151 Spezies haben überhaupt keine Entwicklung und
+schlüpfen direkt in ihre Endstufe:
+
+> Porenta, Onix, Kicklee, Nockchan, Schlurp, Chaneira, Tangela, Kangama,
+> Pantimos, Sichlor, Rossana, Elektek, Magmar, Pinsir, Tauros, Lapras, Ditto,
+> Porygon, Aerodactyl, Relaxo — dazu die fünf Legendären Arktos, Zapdos,
+> Lavados, Mewtu und Mew, die zwar nicht als wilde Gegner auftreten, aber aus
+> einem Ei schlüpfen können.
+
+Wird das Feld nur in `evolve()` gefüllt, bleibt es bei diesen 25 für immer 0,
+die Prüfung greift nie und **sie können sich nie verabschieden**. Der
+Lebenszyklus bräche für ein Sechstel des Dex still ab.
+
+Also: in `hatch()` prüfen, ob `DEX_TBL[speciesId].evolvesTo == 0`, und dann
+`finalFormAt = ageMinutes` setzen. Dasselbe gilt für die Migration aus 5.4 —
+ein alter Spielstand, der bereits in der Endstufe steht, bekommt
+`finalFormAt = ageMinutes`, sonst verliert er sein Abschiedsfenster.
+
 ---
 
 ## 4. Levelaufstieg durch Kampf

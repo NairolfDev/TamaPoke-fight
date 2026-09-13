@@ -56,9 +56,22 @@ void fighterFromPet(Fighter &f, const Pet &p) {
   f.atk = p.atkStat();
   f.def = p.defStat();
   f.spe = p.speStat();
-  f.moveCount = movesForLevel(dex, f.level, f.moves);
-  for (uint8_t i = 0; i < MOVE_SLOTS; i++)
-    f.pp[i] = i < f.moveCount ? MOVE_TBL[f.moves[i]].maxPp : 0;
+  // 5.3: die Slots des Pets sind die Wahrheit, nicht das Learnset. Sonst
+  // waere die Wahl aus dem Lerndialog wirkungslos, und die AP wuerden sich
+  // bei jedem Kampfstart heimlich wieder fuellen (6.7 will das nur beim
+  // Aufwachen). Die Indizes bleiben 1:1, damit die AP zurueckgeschrieben
+  // werden koennen.
+  f.moveCount = 0;
+  for (uint8_t i = 0; i < MOVE_SLOTS; i++) {
+    f.moves[i] = p.moves[i];
+    f.pp[i] = p.pp[i];
+    if (p.moves[i]) f.moveCount = i + 1;
+  }
+  if (f.moveCount == 0) {  // Notnagel: leere Slots duerfen nicht vorkommen
+    f.moves[0] = MOVE_STRUGGLE;
+    f.pp[0] = MOVE_TBL[MOVE_STRUGGLE].maxPp;
+    f.moveCount = 1;
+  }
   f.bond = p.bond;
   f.berryLeft = p.berryKnown ? 1 : 0;
   f.endureLeft = 1;

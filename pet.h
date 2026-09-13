@@ -101,6 +101,27 @@ public:
   void migrate();               // 5.4: NVS-Schema hochziehen
   void setLevel(uint8_t lv);    // Testhilfe fuer den LVL-Konsolenbefehl
 
+  // --- Attackenslots (5.3) ---
+  // moves[]/pp[] sind die Wahrheit: der Kampf liest sie, er leitet die
+  // Attacken nicht mehr bei jedem Start aus dem Learnset ab. Sonst waere die
+  // Wahl des Spielers im Lerndialog wirkungslos.
+  void syncMoves();             // Slots aus dem Learnset fuellen
+  void refillPp();              // 6.7: AP sind beim Aufwachen wieder voll
+  void learnMove(uint8_t mv, int8_t slot);  // Slot ersetzen (oder belegen)
+  int8_t freeMoveSlot() const {
+    for (int8_t i = 0; i < 4; i++)
+      if (!moves[i]) return i;
+    return -1;
+  }
+  bool knowsMove(uint8_t mv) const {
+    for (uint8_t i = 0; i < 4; i++)
+      if (moves[i] == mv) return true;
+    return false;
+  }
+  // Attacke, die nach einem Aufstieg ansteht und noch keinen Slot hat.
+  // 0 = keine. Die UI raeumt sie ueber den Lerndialog ab.
+  uint8_t pendingMove = 0;
+
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
 
