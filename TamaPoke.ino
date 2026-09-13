@@ -484,7 +484,9 @@ void handleSerial() {
     }
     Serial.println("DONE");
   } else if (line.startsWith("LVL ")) {
-    pet.ageMinutes = (uint32_t)line.substring(4).toInt() * MINUTES_PER_LEVEL;
+    // 4.4: LVL setzt levelsWon, nicht mehr ageMinutes
+    pet.setLevel((uint8_t)line.substring(4).toInt());
+    Serial.printf("nv=%u xp=0/%u\n", pet.level(), pet.lvlReq());
     Serial.println("DONE");
   } else if (line.startsWith("TIME ")) {
     uint32_t e = (uint32_t)line.substring(5).toInt();
@@ -1255,7 +1257,13 @@ static void btApplyEvents(BattleEvent *ev, uint8_t n) {
 static void btFinish(uint8_t res) {
   pet.battleCost();  // in jedem Fall: -15 ENE, -8 FOOD, -5 HYG
   if (res == BR_WIN) {
+    // 4.2/4.3: ist eine Stufe offen, IST dieser Sieg der Aufstieg. Sonst
+    // zahlt er auf xpMinutes ein. Reihenfolge wichtig - erst pruefen, dann
+    // aufsteigen, sonst bekommt der Levelkampf zusaetzlich noch XP.
+    bool wasPending = pet.levelPending();
     pet.battleWin();
+    if (wasPending) pet.levelUp();
+    else pet.addBattleXp(btFo.level);
     if (pmd.has(PMD_POSE)) btActPl = PMD_POSE;
     btActUntil = millis() + 1600;
     sfxPlay(SFX_LEVEL);
@@ -1884,13 +1892,25 @@ void renderCardProgress() {
   gfx->print(lv);
 
   // barra de progreso al siguiente nivel (1 nivel = 60 min de juego)
-  uint8_t into = pet.ageMinutes % MINUTES_PER_LEVEL;
+  // 4.4: der Balken zeigt xpMinutes gegen lvlReq(), nicht die Uhr. Ist die
+  // Stufe offen, steht er voll und der Text sagt, dass ein Kampf faellig ist.
+  uint32_t need = pet.lvlReq();
+  uint32_t into = pet.xpMinutes > need ? need : pet.xpMinutes;
   int bx = 93, bw = 280, by = 158, bh = 22;
   gfx->fillRoundRect(bx, by, bw, bh, 6, UI_TRACK);
-  int fw = (bw - 4) * into / MINUTES_PER_LEVEL;
-  if (fw > 0) gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5, UI_BAR_OK);
+  bool ready = pet.levelPending();
+  int fw = need ? (int)((uint32_t)(bw - 4) * into / need) : 0;
+  if (fw > 0)
+    gfx->fillRoundRect(bx + 2, by + 2, fw, bh - 4, 5,
+                       ready ? UI_BAR_WARN : UI_BAR_OK);
   char nx[26];
-  snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), MINUTES_PER_LEVEL - into, pet.level() + 1);
+  if (pet.level() >= LEVEL_CAP)
+    snprintf(nx, sizeof(nx), "%s", T(S_FINAL_FORM));
+  else if (ready)
+    snprintf(nx, sizeof(nx), "%s", T(S_BT_READY));
+  else
+    snprintf(nx, sizeof(nx), T(S_NEXT_LVL_FMT), (unsigned)(need - into),
+             pet.level() + 1);
   gfx->setTextColor(UI_INK);
   gfx->setTextSize(2);
   gfx->setCursor(CX - strlen(nx) * 6, by + 32);

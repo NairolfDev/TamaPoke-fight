@@ -2,6 +2,12 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+#include "levels.h"  // LVL_REQ, LEVEL_CAP (BATTLE_SPEC 3.2)
+
+// Schemaversion des NVS-Blocks. Beim Hochzaehlen gehoert eine Migration in
+// Pet::migrate() dazu - Nutzer sollen fuer ein Update kein WIPE brauchen.
+#define NVS_VER 2
+
 // 1 tick = 1 minuto de juego. Baja este valor para probar mas rapido
 // (p. ej. 5000UL = las estadisticas caen 12x mas rapido).
 #define PET_TICK_MS 60000UL
@@ -12,7 +18,11 @@
 #define HEART_MS 1500UL
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
 #define CEREMONY_MS 10000UL                // duracion de la despedida en pantalla
-#define FAREWELL_AGE_MIN (3UL * 24 * 60)   // se despide a los 3 dias de juego (en forma final)
+// 3.3: Endstufe seit mindestens einem Tag. Frueher waren es drei Tage
+// Gesamtalter - mit der Kurve aus 3.2 faellt die Endstufe aber selbst erst
+// nach 3,5 Tagen, der Abschiedsbutton erschiene also im selben Moment wie
+// die letzte Entwicklung, ohne Endgame-Fenster.
+#define FINAL_FORM_MIN (24UL * 60)
 #define RUNAWAY_TICKS 60                   // se escapa tras 1 h con TODO a cero
 
 // ceremonias de fin de ciclo
@@ -63,7 +73,33 @@ public:
   uint16_t newMedal = 0;   // recien conseguida(s), para celebrar
   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
   uint16_t gameHi = 0;     // record del minijuego (del jugador)
-  uint16_t strHi = 0;      // record de golpes al saco
+  uint16_t strHi = 0;      // record de golpes al saco (sin usar desde Fase 5)
+
+  // --- Phase 5: Levelaufstieg durch Kampf (BATTLE_SPEC 5.4) ---
+  // ageMinutes laeuft unveraendert weiter und treibt weiter Statusverfall,
+  // Kack-Rhythmus, Gewicht und Lebenszyklus. Das Level haengt daneben an
+  // levelsWon, sonst friert ein Anhalten von ageMinutes das ganze Spiel ein.
+  uint32_t xpMinutes = 0;    // Fortschritt, friert bei lvlReq() ein
+  uint8_t levelsWon = 0;     // level() = 1 + levelsWon
+  uint32_t finalFormAt = 0;  // ageMinutes beim Erreichen der Endstufe
+  uint8_t moves[4] = { 0 };  // Attacken-IDs, 0 = leerer Slot (= MOVE_SLOTS)
+  uint8_t pp[4] = { 0 };
+  uint16_t battlesWon = 0, battlesLost = 0;
+  uint8_t lossStreak = 0;    // Mitleidsstaffelung, siehe 6.7
+  uint8_t nvsVer = NVS_VER;  // Schemaversion, siehe migrate() in pet.cpp
+
+  // 4.2: xpMinutes zaehlt pro Spielminute um 1 hoch und STOPPT bei
+  // lvlReq(). Kein Banking - es ist immer genau eine Stufe offen.
+  void tickXp() {
+    if (isEgg() || level() >= LEVEL_CAP) return;
+    uint16_t need = lvlReq();
+    if (xpMinutes < need) xpMinutes++;
+  }
+
+  void levelUp();               // 4.2: nach gewonnenem Levelkampf
+  void addBattleXp(uint8_t foeLevel);  // 4.3: XP aus freiem Kampf
+  void migrate();               // 5.4: NVS-Schema hochziehen
+  void setLevel(uint8_t lv);    // Testhilfe fuer den LVL-Konsolenbefehl
 
   void begin();                 // carga estado de NVS (o crea el primer huevo)
   void update(uint32_t nowMs);  // llamar en cada loop()
@@ -122,7 +158,28 @@ public:
   void chooseStarter(int16_t dex) { eggTarget = dex; starterPick = false; save(); }
   void factoryReset() { prefs.clear(); }  // borra la NVS (test: comando serie WIPE)
   void dbgRunawayReady() { fullness = joy = energy = hygiene = 0; neglectTicks = RUNAWAY_TICKS; }  // test
-  uint8_t level() const { return 1 + ageMinutes / MINUTES_PER_LEVEL; }
+  // 4.2: das Level steigt nur durch gewonnene Kaempfe, nicht mit der Zeit.
+  uint8_t level() const { return 1 + levelsWon; }
+
+  // Minuten von diesem Level auf das naechste. Bei LEVEL_CAP friert der
+  // Fortschritt ein, dann gibt es keine Levelkaempfe mehr.
+  uint16_t lvlReq() const {
+    return level() >= LEVEL_CAP ? 0xFFFF : LVL_REQ[level()];
+  }
+
+  // Eine offene Stufe: der naechste gewonnene Kampf ist der Levelkampf.
+  // Kein Banking - xpMinutes stoppt bei lvlReq(), es ist immer genau eine.
+  bool levelPending() const { return xpMinutes >= lvlReq(); }
+
+  // 4.3: XP eines freien Kampfes. Nur wenn KEIN Level offen ist - sonst ist
+  // der naechste Sieg selbst der Aufstieg.
+  uint16_t xpGainFor(uint8_t foeLevel) const {
+    if (levelPending() || level() >= LEVEL_CAP) return 0;
+    int pct = 12 + 4 * ((int)foeLevel - (int)level());
+    if (pct < 5) pct = 5;
+    if (pct > 25) pct = 25;
+    return (uint16_t)((uint32_t)lvlReq() * pct / 100);
+  }
   bool isRegistered(int16_t dex) const {
     return dex >= 1 && dex <= 151 && (dexReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));
   }

@@ -39,6 +39,7 @@ enum StrId : uint8_t {
   // Gemischtschreibung ("Erschoepft..."), hier braucht es ein Label in
   // ASCII-Grossbuchstaben.
   S_BT_SUPER, S_BT_CRIT, S_BT_WEAK, S_BT_NONE, S_BT_EXHAUSTED, S_BT_FLEE,
+  S_BT_READY,  // 4.4: offene Stufe, der naechste Sieg ist der Aufstieg
   // ficha: medallas
   S_MEDALS_FMT, S_BACK,
   // teclado y galeria

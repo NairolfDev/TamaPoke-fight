@@ -35,6 +35,15 @@ void Pet::newEgg() {
   careMistakes = 0;
   mistakeCooldown = 0;
   sleeping = false;
+  // Phase 5: das Level gehoert dem Individuum, nicht dem Spieler. Ein neues
+  // Ei faengt bei Level 1 an, und eine Niederlagenserie darf es nicht erben.
+  // battlesWon/battlesLost laufen dagegen als Spielerrekord weiter, wie
+  // gameHi und totalMedals.
+  xpMinutes = 0;
+  levelsWon = 0;
+  finalFormAt = 0;
+  lossStreak = 0;
+  for (uint8_t i = 0; i < sizeof(moves); i++) moves[i] = pp[i] = 0;
   save();
 }
 
@@ -68,6 +77,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
       if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
       continue;
     }
+    tickXp();  // 4.2: der Fortschritt laeuft auch offline weiter
     if (sleeping) {  // descanso: baja lento y con suelo, igual que en vivo
       energy = clamp100(energy + 6);
       if (ageMinutes % 2 == 0) {
@@ -118,6 +128,7 @@ void Pet::tick() {
     if (ageMinutes >= 3) hatch();  // si no lo tocas, eclosiona solo a los 3 min
     return;
   }
+  tickXp();  // 4.2
 
   // el sueño es descanso: la energia se recupera y las necesidades bajan MUCHO
   // mas lento que despierto y con suelo (amanece pidiendo algo de mimo, no a
@@ -136,7 +147,6 @@ void Pet::tick() {
     return;
   }
 
-  if (ageMinutes % MINUTES_PER_LEVEL == 0) sfxPlay(SFX_LEVEL);  // subio de nivel (despierto)
 
   fullness = clamp100(fullness - 2);
   energy = clamp100(energy - 1);
@@ -346,7 +356,8 @@ uint16_t Pet::registeredCount() const {
 // despedida la dispara el usuario con el boton (no salta sola, para que la vea)
 bool Pet::canFarewellNow() const {
   return !isEgg() && !sleeping && ceremony == CER_NONE &&
-         DEX_TBL[speciesId].evolvesTo == 0 && ageMinutes >= FAREWELL_AGE_MIN;
+         DEX_TBL[speciesId].evolvesTo == 0 && finalFormAt &&
+         ageMinutes - finalFormAt >= FINAL_FORM_MIN;
 }
 
 // abandono total durante 1h: lista para escaparse. La dispara el usuario con el
@@ -399,6 +410,11 @@ void Pet::hatch() {
   newMedal = 0;
   nick[0] = 0;
   registerSpecies(speciesId);  // criado = registrado en la pokedex
+  // 3.3: schluepft es schon in seiner Endstufe, laeuft das Abschiedsfenster ab
+  // jetzt. Das betrifft 25 Spezies ohne Entwicklung (Porenta, Onix, Kicklee,
+  // ...) - ohne diese Zeile koennten die sich nie verabschieden, weil
+  // canFarewellNow() ein gesetztes finalFormAt verlangt.
+  if (DEX_TBL[speciesId].evolvesTo == 0) finalFormAt = ageMinutes;
   checkMedals();     // por si nace ya en forma final (legendario)
   sfxPlay(SFX_HATCH);
   save();
@@ -430,6 +446,9 @@ void Pet::evolve() {
   }
   speciesId = next;
   registerSpecies(speciesId);
+  // 3.3: Zeitpunkt der Endstufe merken, daran haengt das Abschiedsfenster
+  if (DEX_TBL[speciesId].evolvesTo == 0 && !finalFormAt)
+    finalFormAt = ageMinutes;
   sfxPlay(SFX_EVOLVE);
   evolveUntil = millis() + EVOLVE_ANIM_MS;
   save();
@@ -502,6 +521,8 @@ void Pet::battleWin() {
   if (ceremony != CER_NONE || isEgg()) return;
   joy = clamp100(joy + 8);
   addBond(1);
+  battlesWon++;
+  lossStreak = 0;
   uint8_t *stat = nullptr;
   switch (random(3)) {
     case 0: stat = &trAtk; break;
@@ -520,6 +541,64 @@ void Pet::battleWin() {
 void Pet::battleLoss() {
   if (ceremony != CER_NONE || isEgg()) return;
   joy = joy > 5 ? joy - 5 : 0;
+  battlesLost++;
+  if (lossStreak < 255) lossStreak++;
+  save();
+}
+
+// 4.2: Levelaufstieg nach gewonnenem Levelkampf. xpMinutes -= lvlReq(),
+// levelsWon++. Der Levelsound haengt hier und nicht mehr am Tick (4.4).
+void Pet::levelUp() {
+  if (isEgg() || level() >= LEVEL_CAP) return;
+  uint16_t need = lvlReq();
+  xpMinutes = xpMinutes >= need ? xpMinutes - need : 0;
+  levelsWon++;
+  sfxPlay(SFX_LEVEL);
+  checkMedals();  // MED_LV10 / LV25 / LV50 haengen am Level
+  save();
+}
+
+// 4.3: XP eines freien Kampfes. Ist eine Stufe offen, gibt es keine XP -
+// der naechste Sieg IST der Aufstieg, dafuer braucht die UI keinen
+// Moduswechsel.
+void Pet::addBattleXp(uint8_t foeLevel) {
+  if (isEgg() || levelPending() || level() >= LEVEL_CAP) return;
+  uint16_t gain = xpGainFor(foeLevel);
+  uint16_t need = lvlReq();
+  uint32_t v = xpMinutes + gain;
+  xpMinutes = v > need ? need : (uint32_t)v;  // friert bei lvlReq() ein
+  save();
+}
+
+// Testhilfe fuer LVL <n> auf der Konsole: setzt das Level direkt und stellt
+// den Fortschritt auf null. save() ist privat, deshalb hier statt im Sketch.
+void Pet::setLevel(uint8_t lv) {
+  if (lv < 1) lv = 1;
+  if (lv > LEVEL_CAP) lv = LEVEL_CAP;
+  levelsWon = (uint8_t)(lv - 1);
+  xpMinutes = 0;
+  save();
+}
+
+// 5.4: Migration von Schema 1. Vorhandene Spielstaende haben ageMinutes und
+// daraus abgeleitete Level. Der Nutzer behaelt sein Pokemon, kein WIPE.
+void Pet::migrate() {
+  if (nvsVer >= NVS_VER) return;
+
+  // altes Level war 1 + ageMinutes / 60; levelsWon ist eins weniger
+  uint32_t won = ageMinutes / MINUTES_PER_LEVEL;
+  if (won > LEVEL_CAP - 1) won = LEVEL_CAP - 1;
+  levelsWon = (uint8_t)won;
+  xpMinutes = 0;
+
+  // schon in der Endstufe? Dann laeuft das Abschiedsfenster ab jetzt, sonst
+  // koennte ein altes Pokemon sofort Abschied nehmen, ohne dass der Spieler
+  // die Phase je gesehen hat.
+  finalFormAt = (!isEgg() && DEX_TBL[speciesId].evolvesTo == 0) ? ageMinutes : 0;
+
+  nvsVer = NVS_VER;
+  Serial.printf("nvs 1 -> %u: levelsWon=%u finalFormAt=%u\n", NVS_VER,
+                levelsWon, finalFormAt);
   save();
 }
 
@@ -612,6 +691,17 @@ void Pet::save() {
   prefs.putUShort("ghi", gameHi);
   prefs.putUShort("shi", strHi);
   prefs.putString("nick", nick);
+  // Phase 5 (5.4). Preferences ist Key-Value, neue Schluessel sind also
+  // gefahrlos - alte Staende lesen sie einfach als Default.
+  prefs.putUInt("xpmin", xpMinutes);
+  prefs.putUChar("lvlwon", levelsWon);
+  prefs.putUInt("ffat", finalFormAt);
+  prefs.putBytes("mvs", moves, sizeof(moves));
+  prefs.putBytes("pps", pp, sizeof(pp));
+  prefs.putUShort("bwon", battlesWon);
+  prefs.putUShort("blost", battlesLost);
+  prefs.putUChar("lstrk", lossStreak);
+  prefs.putUChar("nvs", nvsVer);
 }
 
 void Pet::load() {
@@ -664,6 +754,18 @@ void Pet::load() {
   gameHi = prefs.getUShort("ghi", 0);
   strHi = prefs.getUShort("shi", 0);
   prefs.getString("nick", nick, sizeof(nick));
+  // Phase 5 (5.4). Fehlt der Schluessel, ist es ein Stand von Schema 1 -
+  // nvsVer faellt dann auf 1 und migrate() zieht es hoch.
+  xpMinutes = prefs.getUInt("xpmin", 0);
+  levelsWon = prefs.getUChar("lvlwon", 0);
+  finalFormAt = prefs.getUInt("ffat", 0);
+  prefs.getBytes("mvs", moves, sizeof(moves));
+  prefs.getBytes("pps", pp, sizeof(pp));
+  battlesWon = prefs.getUShort("bwon", 0);
+  battlesLost = prefs.getUShort("blost", 0);
+  lossStreak = prefs.getUChar("lstrk", 0);
+  nvsVer = prefs.getUChar("nvs", 1);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
+  migrate();  // 5.4: Schema 1 -> 2, ohne WIPE
 }
