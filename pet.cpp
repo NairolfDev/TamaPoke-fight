@@ -627,6 +627,18 @@ void Pet::setLevel(uint8_t lv) {
   save();
 }
 
+// Testhilfen: setzen direkt und umgehen bewusst das Tageslimit von addBond()
+// bzw. den Energieverfall. Nur fuer die Konsole gedacht.
+void Pet::setBond(uint8_t v) {
+  bond = v > 100 ? 100 : v;
+  save();
+}
+
+void Pet::setEnergy(uint8_t v) {
+  energy = v > 100 ? 100 : v;
+  save();
+}
+
 // 5.4: Migration von Schema 1. Vorhandene Spielstaende haben ageMinutes und
 // daraus abgeleitete Level. Der Nutzer behaelt sein Pokemon, kein WIPE.
 void Pet::migrate() {

@@ -100,6 +100,11 @@ public:
   void addBattleXp(uint8_t foeLevel);  // 4.3: XP aus freiem Kampf
   void migrate();               // 5.4: NVS-Schema hochziehen
   void setLevel(uint8_t lv);    // Testhilfe fuer den LVL-Konsolenbefehl
+  // Testhilfen fuer BOND und ENE auf der Konsole. save() ist privat, deshalb
+  // hier statt im Sketch. Bindung und Erschoepfung sind sonst nicht gezielt
+  // vorfuehrbar - Bindung braucht Tage, Energie Minuten.
+  void setBond(uint8_t v);
+  void setEnergy(uint8_t v);
 
   // --- Attackenslots (5.3) ---
   // moves[]/pp[] sind die Wahrheit: der Kampf liest sie, er leitet die

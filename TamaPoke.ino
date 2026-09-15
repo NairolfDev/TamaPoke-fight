@@ -97,6 +97,11 @@ uint32_t btOverUntil = 0;   // Ergebnisschirm
 uint8_t btActPl = PMD_IDLE, btActFo = PMD_IDLE;
 uint32_t btActUntil = 0;
 bool learnOpen = false;  // 5.3: Lerndialog offen
+// Testhilfe (Konsole FOE): erzwingt den naechsten Gegner. 0 = aus.
+// Bleibt gesetzt, bis FOE 0 kommt - so laesst sich ein Shiny-Gegner
+// wiederholt vorfuehren, statt auf die 1-zu-64-Chance zu warten.
+int16_t forcedFoeDex = 0;
+bool forcedFoeShiny = false;
 
 // las 9 especies con sprite propio en flash (respaldo sin SD): dex -> indice
 int flashIdxForDex(int16_t dex) {
@@ -575,6 +580,26 @@ void handleSerial() {
     Serial.printf("shiny=%d streak=%u/%u bond=%u medals=0x%X(%u) nick=%s\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.medals,
                   pet.totalMedals, pet.nick);
+    Serial.println("DONE");
+  } else if (line.startsWith("BOND ")) {
+    pet.setBond((uint8_t)line.substring(5).toInt());
+    Serial.printf("bond=%u rettung=%u%%\n", pet.bond, pet.bond / 3);
+    Serial.println("DONE");
+  } else if (line.startsWith("ENE ")) {
+    pet.setEnergy((uint8_t)line.substring(4).toInt());
+    Serial.printf("ene=%u erschoepft=%d\n", pet.energy, pet.energy < 20);
+    Serial.println("DONE");
+  } else if (line.startsWith("FOE ")) {
+    String rest = line.substring(4);
+    int sp = rest.indexOf(' ');
+    int d = (sp < 0 ? rest : rest.substring(0, sp)).toInt();
+    forcedFoeShiny = (sp >= 0 && rest.substring(sp + 1).toInt() != 0);
+    forcedFoeDex = (d >= 1 && d <= DEX_COUNT) ? (int16_t)d : 0;
+    if (forcedFoeDex)
+      Serial.printf("gegner fest: %s%s\n", DEX_TBL[forcedFoeDex].name,
+                    forcedFoeShiny ? " SHINY" : "");
+    else
+      Serial.println("gegner wieder zufaellig");
     Serial.println("DONE");
   } else if (line.startsWith("BATTLE ")) {
     battleCmd((uint16_t)line.substring(7).toInt());
@@ -1311,6 +1336,10 @@ void startBattle() {
   uint8_t biome = DEX_TBL[pet.speciesId].biome;
   uint16_t dex = pickWildDexWeighted((int8_t)biome, want, nWant);
   bool shiny = random(64) == 0;  // 6.3: Shiny-Gegner 1 zu 64
+  if (forcedFoeDex >= 1 && forcedFoeDex <= DEX_COUNT) {  // Konsole: FOE
+    dex = (uint16_t)forcedFoeDex;
+    shiny = forcedFoeShiny;
+  }
 
   fighterFromPet(btPl, pet);
   fighterFromDex(btFo, dex, pickFoeLevel(btPl.level, 2), shiny, false);
