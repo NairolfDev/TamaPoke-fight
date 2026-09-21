@@ -111,6 +111,7 @@ public:
   void syncMoves();             // Slots aus dem Learnset fuellen
   void refillPp();              // 6.7: AP sind beim Aufwachen wieder voll
   void learnMove(uint8_t mv, int8_t slot);  // Slot ersetzen (oder belegen)
+  void declineMove();           // 5.3: Lerndialog abgelehnt, Attacke verfaellt
   int8_t freeMoveSlot() const {
     for (int8_t i = 0; i < 4; i++)
       if (!moves[i]) return i;

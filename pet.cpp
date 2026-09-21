@@ -606,6 +606,14 @@ void Pet::learnMove(uint8_t mv, int8_t slot) {
   save();
 }
 
+// 5.3: abgelehnt. Muss speichern, sonst steht pendingMove noch in NVS und
+// der Dialog kommt nach dem naechsten Neustart wieder.
+void Pet::declineMove() {
+  if (!pendingMove) return;
+  pendingMove = 0;
+  save();
+}
+
 // Testhilfe fuer LVL <n> auf der Konsole: setzt das Level direkt und stellt
 // den Fortschritt auf null. save() ist privat, deshalb hier statt im Sketch.
 void Pet::setLevel(uint8_t lv) {
@@ -753,6 +761,10 @@ void Pet::save() {
   prefs.putUShort("bwon", battlesWon);
   prefs.putUShort("blost", battlesLost);
   prefs.putUChar("lstrk", lossStreak);
+  // 5.3: die anstehende Attacke gehoert in NVS. Ohne sie verliert ein
+  // Neustart zwischen Aufstieg und Lerndialog die Attacke endgueltig -
+  // das Level steigt kein zweites Mal.
+  prefs.putUChar("pendmv", pendingMove);
   prefs.putUChar("nvs", nvsVer);
 }
 
@@ -814,6 +826,7 @@ void Pet::load() {
   battlesWon = prefs.getUShort("bwon", 0);
   battlesLost = prefs.getUShort("blost", 0);
   lossStreak = prefs.getUChar("lstrk", 0);
+  pendingMove = prefs.getUChar("pendmv", 0);
   nvsVer = prefs.getUChar("nvs", 1);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);

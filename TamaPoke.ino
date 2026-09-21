@@ -1508,7 +1508,7 @@ void learnTap(int16_t x, int16_t y) {
       pet.learnMove(pet.pendingMove, (int8_t)i);  // vergessen und ersetzen
       sfxPlay(SFX_MEDAL);
     } else {
-      pet.pendingMove = 0;  // abgelehnt
+      pet.declineMove();  // abgelehnt
       sfxPlay(SFX_TAP);
     }
     learnOpen = false;
