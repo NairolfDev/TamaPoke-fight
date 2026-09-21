@@ -76,14 +76,6 @@ bool bathPending = false;
 struct { int16_t x, y; uint8_t r, ph; } bubbles[14];
 uint32_t feedMenuUntil = 0;   // selector de comida abierto hasta este millis
 
-// minijuego "toques": mantener la pokeball en el aire
-bool gameOpen = false;
-uint32_t gameOverUntil = 0;
-float ballX, ballY, ballVX, ballVY, gamePetX;
-uint8_t gameScore, gameMisses;
-float hitX, hitY;             // ultimo golpe (anillo de impacto)
-uint32_t hitTime = 0;
-bool gameNewHi = false;
 
 // freier Kampf (BATTLE_SPEC 6): ersetzt das fruehere Sackhauen
 bool battleOpen = false;
@@ -97,6 +89,8 @@ uint32_t btOverUntil = 0;   // Ergebnisschirm
 uint8_t btActPl = PMD_IDLE, btActFo = PMD_IDLE;
 uint32_t btActUntil = 0;
 bool learnOpen = false;  // 5.3: Lerndialog offen
+bool btLevelFight = false;  // 4.2: laeuft gerade der Levelkampf?
+bool btLevelUp = false;     // 4.2: dieser Kampf hat aufgestiegen
 // Testhilfe (Konsole FOE): erzwingt den naechsten Gegner. 0 = aus.
 // Bleibt gesetzt, bis FOE 0 kommt - so laesst sich ein Shiny-Gegner
 // wiederholt vorfuehren, statt auf die 1-zu-64-Chance zu warten.
@@ -148,6 +142,20 @@ static const int16_t STARTER_DEX[] = { 1, 4, 7, 25, 104 };
 #define STARTER_ROW_GAP 6
 #define GAL_CELL 80  // Zellenkante der Miniaturen, auch von der Galerie benutzt
 // boton-CTA de evolucion (centrado, mitad de pantalla)
+// 4.2: Hinweisband "KAMPF BEREIT" auf dem Hauptschirm. Es liegt im Band
+// zwischen Statustext (endet y 106) und Sprite-Oberkante (PET_GROUND 304
+// minus maximal 170 px Sprite = 134). Ecken (113,106) und (353,134) haben
+// 175 bzw. 155 Abstand zur Mitte, liegen also klar im Radius 231.
+// Antippbar: startet den Levelkampf direkt, damit man nicht erst die
+// Statuskarte aufziehen muss. Es liegt INNERHALB von inPetZone, wird in
+// onTap deshalb VOR dem Streicheln geprueft - solange eine Stufe offen
+// ist, startet dieser 28 px hohe Streifen den Kampf, der Rest der 213 px
+// hohen Pet-Zone streichelt weiter.
+#define LVLB_X 113
+#define LVLB_W 240
+#define LVLB_Y 106
+#define LVLB_H 28
+
 #define EVO_BTN_W 256
 #define EVO_BTN_H 64
 #define EVO_BTN_X (CX - EVO_BTN_W / 2)
@@ -320,7 +328,7 @@ void loop() {
   // 85 ms en juego/saco: margen seguro para que el redibujado no pise el envio
   // DMA del frame anterior (a 40-65 ms solapaba y causaba flashes negros; con
   // sprites grandes el dibujo tarda mas, asi que se deja colchon)
-  if (now - lastRender >= (uint32_t)((gameOpen || battleOpen) ? 85 : 100)) {
+  if (now - lastRender >= (uint32_t)(battleOpen ? 85 : 100)) {
     lastRender = now;
     render();
   }
@@ -667,8 +675,7 @@ void openClock();  // prototipo
 
 void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || galleryOpen || kbOpen || battleOpen || learnOpen ||
-      pet.ceremony)
+  if (galleryOpen || kbOpen || battleOpen || learnOpen || pet.ceremony)
     return;
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
@@ -686,7 +693,7 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (gameOpen || kbOpen || clockOpen) return;
+  if (kbOpen || clockOpen) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > 3 ? 3 : p);
@@ -764,10 +771,6 @@ void onTap(int16_t x, int16_t y) {
     }
     return;
   }
-  if (gameOpen) {
-    gameTap(x, y);
-    return;
-  }
   if (choiceKind) {          // dialogo de decision: boton accion (arriba) / mantener (abajo)
     bool b1 = (x >= 93 && x <= 373 && y >= 206 && y <= 258);  // accion
     bool b2 = (x >= 93 && x <= 373 && y >= 268 && y <= 320);  // mantener / quedaros
@@ -823,7 +826,7 @@ void onTap(int16_t x, int16_t y) {
       if (i == 0) {
         if (!pet.sleeping) feedMenuUntil = millis() + 6000;
       } else if (i == 1) {
-        startGame();
+        startBattle();  // Spielen-Icon startet jetzt den Kampf
       } else if (i == 2) {
         pet.toggleLight();
       } else {
@@ -833,6 +836,13 @@ void onTap(int16_t x, int16_t y) {
     }
   }
   // tocar al bicho = caricia
+  // 4.2: das Hinweisband startet den Levelkampf. Muss vor inPetZone
+  // stehen, weil es darin liegt - sonst wuerde gestreichelt.
+  if (pet.levelPending() && x >= LVLB_X && x <= LVLB_X + LVLB_W &&
+      y >= LVLB_Y && y <= LVLB_Y + LVLB_H) {
+    startBattle();
+    return;
+  }
   if (inPetZone(x, y)) {
     Serial.println("PET");
     pet.caress();
@@ -993,10 +1003,6 @@ void render() {
     renderGallery();
     return;
   }
-  if (gameOpen) {
-    renderGame();
-    return;
-  }
   if (learnOpen) {  // 5.3: erst entscheiden, dann weiterspielen
     renderLearn();
     return;
@@ -1071,6 +1077,7 @@ void render() {
     drawBars();
     drawButtons();
     drawCelebration();
+    if (pet.levelPending()) drawLevelReadyBand();          // 4.2: Rangkampf steht an
     if (pet.wantEvolveButton()) drawEvolveButton();        // CTA rojo: evolucionar
     else if (pet.canRunawayNow()) drawRunawayButton();     // CTA sombrio: escapada (abandono)
     else if (pet.wantFarewellButton()) drawFarewellButton();  // CTA dorado: despedida
@@ -1129,91 +1136,7 @@ void render() {
   gfx->flush();
 }
 
-// ---------- minijuego: toques con la pokeball ----------
-
-void startGame() {
-  if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
-  gameOpen = true;
-  gameOverUntil = 0;
-  gameScore = 0;
-  gameMisses = 0;
-  gameNewHi = false;
-  hitTime = 0;
-  gamePetX = 233;
-  respawnBall();
-}
-
-void respawnBall() {
-  ballX = 150 + random(166);
-  ballY = 96;
-  float sp = 1.6f + gameScore * 0.05f;  // mas viva segun avanzas
-  if (sp > 4.0f) sp = 4.0f;
-  ballVX = random(2) ? sp : -sp;
-  ballVY = 0;
-}
-
-void gameTap(int16_t x, int16_t y) {
-  if (gameOverUntil) return;
-  if (y < 72) {  // tocar la cabecera = abandonar sin premio
-    gameOpen = false;
-    return;
-  }
-  float dx = ballX - x, dy = ballY - y;
-  if (dx * dx + dy * dy < 74 * 74) {  // toque a la bola!
-    gameScore++;
-    sfxPlay(SFX_PLAY);
-    // golpe mas suave: impulso moderado que crece poco a poco con la puntuacion
-    float lift = 6.6f + (gameScore > 16 ? 3.5f : gameScore * 0.22f);
-    ballVY = -lift;
-    ballVX += dx * 0.12f;
-    if (ballVX > 6.5f) ballVX = 6.5f;
-    if (ballVX < -6.5f) ballVX = -6.5f;
-    hitX = ballX;
-    hitY = ballY;
-    hitTime = millis();
-  }
-}
-
-void stepGame() {
-  float grav = 0.40f + gameScore * 0.013f;  // cae un poco mas rapido cada vez
-  if (grav > 0.80f) grav = 0.80f;
-  ballVY += grav;
-  ballX += ballVX;
-  ballY += ballVY;
-  // rebote en la pared circular
-  float dx = ballX - CX, dy = ballY - CY;
-  float d = sqrtf(dx * dx + dy * dy);
-  if (d > 205) {
-    float nx = dx / d, ny = dy / d;
-    float dot = ballVX * nx + ballVY * ny;
-    if (dot > 0) {
-      ballVX = (ballVX - 2 * dot * nx) * 0.85f;
-      ballVY = (ballVY - 2 * dot * ny) * 0.85f;
-    }
-    ballX = CX + nx * 205;
-    ballY = CY + ny * 205;
-  }
-  if (ballY > 384) {  // al suelo
-    if (++gameMisses >= 3) {
-      gameNewHi = (gameScore > pet.gameHi);
-      pet.playResult(gameScore);  // actualiza el record y da felicidad
-      sfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
-      gameOverUntil = millis() + 4000;
-    } else {
-      respawnBall();
-    }
-  }
-  // el bicho la sigue por abajo
-  float chase = (ballX - gamePetX) * 0.12f;
-  if (chase > 7) chase = 7;
-  if (chase < -7) chase = -7;
-  gamePetX += chase;
-}
-
 // ---------- freier Kampf (BATTLE_SPEC 6 und 8) ----------
-//
-// Ersetzt das Sackhauen. Der ATK-Pfad bleibt erhalten, weil jeder Sieg nach
-// 6.7 einen Trainingspunkt gibt (Pet::battleWin).
 //
 // Geometrie auf dem runden Screen (Mitte 233/233, Radius 231). Die
 // Attackenreihe ist der engste Fall: bei y 382 betraegt die nutzbare
@@ -1311,7 +1234,7 @@ static void btFinish(uint8_t res) {
     // aufsteigen, sonst bekommt der Levelkampf zusaetzlich noch XP.
     bool wasPending = pet.levelPending();
     pet.battleWin();
-    if (wasPending) pet.levelUp();
+    if (wasPending) { pet.levelUp(); btLevelUp = true; }
     else pet.addBattleXp(btFo.level);
     if (pmd.has(PMD_POSE)) btActPl = PMD_POSE;
     btActUntil = millis() + 1600;
@@ -1351,6 +1274,8 @@ void startBattle() {
   if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) > 512 * 1024)
     foePmd.load((uint8_t)dex, shiny);
 
+  btLevelFight = pet.levelPending();  // 4.2: Levelkampf oder freier Kampf
+  btLevelUp = false;
   btOutcome = BR_ONGOING;
   btRound = 0;
   btMsg[0] = 0;
@@ -1400,14 +1325,41 @@ void renderBattle() {
   // Ergebnisschirm
   if (btOverUntil) {
     if (now > btOverUntil) { btClose(); return; }
-    const char *t = btOutcome == BR_WIN ? T(S_GREAT)
-                    : btOutcome == BR_LOSS ? T(S_SAD) : T(S_BATTLE);
-    gfx->setTextColor(ink);
-    gfx->setTextSize(3);
-    gfx->setCursor(CX - strlen(t) * 9, 210);
-    gfx->print(t);
+    // 4.2: Aufstieg wird gefeiert, nicht nur hochgezaehlt. Die neue
+    // Levelzahl gross in der Mitte, darueber das Wort, dazu die
+    // vorhandene Medaillen-Feier.
+    if (btLevelUp) {
+      const char *w = T(S_GREAT);
+      gfx->setTextColor(UI_BAR_WARN);
+      gfx->setTextSize(3);
+      gfx->setCursor(CX - strlen(w) * 9, 150);
+      gfx->print(w);
+      char lv[16];
+      snprintf(lv, sizeof(lv), T(S_LVL_FMT), pet.level());
+      int p = (int)(4 * sinf(now * 0.006f));  // pulsiert leicht
+      gfx->setTextColor(ink);
+      gfx->setTextSize(5 + (p > 2 ? 1 : 0));
+      gfx->setCursor(CX - strlen(lv) * 15, 208);
+      gfx->print(lv);
+    } else {
+      const char *t = btOutcome == BR_WIN ? T(S_GREAT)
+                      : btOutcome == BR_LOSS ? T(S_SAD) : T(S_BATTLE);
+      gfx->setTextColor(ink);
+      gfx->setTextSize(3);
+      gfx->setCursor(CX - strlen(t) * 9, 210);
+      gfx->print(t);
+    }
     gfx->flush();
     return;
+  }
+
+  // 4.2: Levelkampf-Leiste. Der Gegnername steht bei y 76, hier ist frei.
+  if (btLevelFight) {
+    gfx->fillRoundRect(CX - 90, 56, 180, 18, 8, UI_BAR_WARN);
+    gfx->setTextColor(UI_INK);
+    gfx->setTextSize(1);
+    gfx->setCursor(CX - strlen(T(S_BT_READY)) * 3, 62);
+    gfx->print(T(S_BT_READY));
   }
 
   // Gegner: oben rechts, leicht verkleinert, HP-Balken darueber
@@ -1613,97 +1565,6 @@ void drawGameScene() {
   gfx->fillRect(0, hor, 466, 466 - hor, soil);
 }
 
-void renderGame() {
-  // sin fillScreen(NEGRO): drawGameScene cubre los 466x466 completos. Si el
-  // DMA del flush anterior aun lee el buffer, vera contenido valido (no negro
-  // a medio pintar), que era el parpadeo a 25 fps.
-  bool night = sceneHour() < 6 || sceneHour() >= 20;
-  uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
-
-  if (gameOverUntil) {
-    drawGameScene();
-    if (millis() > gameOverUntil) {
-      gameOpen = false;
-      return;
-    }
-    char buf[22];
-    snprintf(buf, sizeof(buf), T(S_SCORE_FMT), gameScore);
-    gfx->setTextColor(ink);
-    gfx->setTextSize(4);
-    gfx->setCursor(CX - strlen(buf) * 12, 160);
-    gfx->print(buf);
-    gfx->setTextSize(2);
-    if (gameNewHi && gameScore > 0) {
-      gfx->setTextColor(UI_BAR_WARN);
-      gfx->setCursor(CX - strlen(T(S_NEW_RECORD)) * 6, 214);
-      gfx->print(T(S_NEW_RECORD));
-    } else {
-      char rec[20];
-      snprintf(rec, sizeof(rec), T(S_RECORD_FMT), pet.gameHi);
-      gfx->setTextColor(ink);
-      gfx->setCursor(CX - strlen(rec) * 6, 214);
-      gfx->print(rec);
-    }
-    const char *msg = gameScore >= 10 ? T(S_GREAT_JOY) : T(S_PLUS_JOY);
-    gfx->setTextColor(ink);
-    gfx->setCursor(CX - strlen(msg) * 6, 250);
-    gfx->print(msg);
-    gfx->flush();
-    return;
-  }
-
-  drawGameScene();
-  stepGame();
-
-  // marcador, record y vidas
-  char buf[8];
-  snprintf(buf, sizeof(buf), "%u", gameScore);
-  gfx->setTextColor(ink);
-  gfx->setTextSize(4);
-  gfx->setCursor(CX - strlen(buf) * 12, 30);
-  gfx->print(buf);
-  char rec[12];
-  snprintf(rec, sizeof(rec), T(S_REC_FMT), pet.gameHi);
-  gfx->setTextSize(2);
-  gfx->setCursor(CX - strlen(rec) * 6, 76);
-  gfx->print(rec);
-  for (int i = 0; i < 3; i++) {
-    if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
-    else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
-  }
-
-  if (pmd.loaded) {
-    uint8_t act = (ballX > gamePetX + 4) ? PMD_WALKR : (ballX < gamePetX - 4) ? PMD_WALKL : PMD_IDLE;
-    if (!pmd.has(act)) act = PMD_IDLE;
-    drawPmdAct(act, (int)gamePetX, 394, millis(), true, false, 3);
-  } else if (mon.loaded) {
-    int s = (mon.h * 2 > 130) ? 1 : 2;
-    int w = mon.w * s, h = mon.h * s;
-    uint16_t fm = mon.frameMs ? mon.frameMs : 100;
-    uint16_t fi = (millis() / fm) % mon.frames;
-    const uint8_t *fr = mon.data + (uint32_t)fi * mon.w * mon.h;
-    int px = (int)gamePetX - w / 2, py = 394 - h;
-    for (int r = 0; r < mon.h; r++)
-      for (int c = 0; c < mon.w; c++) {
-        uint8_t idx = fr[r * mon.w + c];
-        if (idx == 0xFF) continue;
-        gfx->fillRect(px + c * s, py + r * s, s, s, mon.pal[idx]);
-      }
-  }
-
-  // anillo de impacto que se expande y desvanece (feedback suave del golpe)
-  uint32_t ht = millis() - hitTime;
-  if (hitTime && ht < 260) {
-    int rad = 22 + (int)(ht / 6);
-    gfx->drawCircle((int)hitX, (int)hitY, rad, C565(0xff, 0xe7, 0x9f));
-    gfx->drawCircle((int)hitX, (int)hitY, rad - 2, C565(0xff, 0xd9, 0x8a));
-  }
-
-  // la pokeball
-  drawMap(SPR_ICON_PLAY, 16, (int)ballX - 24, (int)ballY - 24, 3, false);
-
-  gfx->flush();
-}
 
 // ---------- ficha del bicho (deslizar vertical) ----------
 
@@ -1963,12 +1824,17 @@ void renderCardStats() {
   drawCardStat(202, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
   drawCardStat(244, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 
-  // boton: saco de entrenamiento de fuerza
-  gfx->fillRoundRect(96, 300, 274, 40, 12, UI_BAR_BAD);
-  gfx->setTextColor(UI_BG_DAY);
+  // Kampfbutton, zwei Zustaende (4.2): bei offener Stufe ist der naechste
+  // Sieg der Aufstieg - gleiche Flaeche, nur Farbe, Rahmen und Text
+  // wechseln, damit das Layout nicht springt.
+  bool ready = pet.levelPending();
+  const char *lbl = ready ? T(S_BT_READY) : T(S_FIGHT_FREE);
+  gfx->fillRoundRect(96, 300, 274, 40, 12, ready ? UI_BAR_WARN : UI_BAR_BAD);
+  if (ready) gfx->drawRoundRect(96, 300, 274, 40, 12, UI_INK);
+  gfx->setTextColor(ready ? UI_INK : UI_BG_DAY);
   gfx->setTextSize(2);
-  gfx->setCursor(CX - strlen(T(S_FIGHT_FREE)) * 6, 311);
-  gfx->print(T(S_FIGHT_FREE));
+  gfx->setCursor(CX - strlen(lbl) * 6, 311);
+  gfx->print(lbl);
 }
 
 // pagina 2: medallas con etiqueta descriptiva
@@ -2396,6 +2262,19 @@ void drawChoiceDialog() {
   gfx->setTextColor(t2);
   gfx->setCursor(CX - (int)strlen(o2) * 6, 286);
   gfx->print(o2);
+}
+
+// 4.2: Hinweisband, dass ein Levelkampf ansteht. Pulsiert wie der
+// Evolutions-CTA, ist aber schmal - der Sprite darunter bleibt sichtbar.
+void drawLevelReadyBand() {
+  int p = (int)(3 * sinf(millis() * 0.005f));  // atmet: -3..3
+  gfx->fillRoundRect(LVLB_X - p, LVLB_Y, LVLB_W + 2 * p, LVLB_H, 10,
+                     UI_BAR_WARN);
+  gfx->drawRoundRect(LVLB_X - p, LVLB_Y, LVLB_W + 2 * p, LVLB_H, 10, UI_INK);
+  gfx->setTextColor(UI_INK);
+  gfx->setTextSize(2);
+  gfx->setCursor(CX - strlen(T(S_BT_READY)) * 6, LVLB_Y + 7);
+  gfx->print(T(S_BT_READY));
 }
 
 // boton-CTA rojo y grande para evolucionar (pulsa para llamar la atencion)

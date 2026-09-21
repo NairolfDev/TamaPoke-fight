@@ -40,7 +40,7 @@ void Pet::newEgg() {
   // Phase 5: das Level gehoert dem Individuum, nicht dem Spieler. Ein neues
   // Ei faengt bei Level 1 an, und eine Niederlagenserie darf es nicht erben.
   // battlesWon/battlesLost laufen dagegen als Spielerrekord weiter, wie
-  // gameHi und totalMedals.
+  // totalMedals.
   xpMinutes = 0;
   levelsWon = 0;
   finalFormAt = 0;
@@ -489,22 +489,6 @@ void Pet::feedCandy() {
   save();
 }
 
-void Pet::playResult(uint8_t score) {
-  if (ceremony != CER_NONE || isEgg()) return;
-  uint8_t v = trSpe + score / 5;  // jugar entrena la velocidad
-  trSpe = v > 100 ? 100 : v;
-  joy = clamp100(joy + 5 + (score > 15 ? 30 : score * 2));
-  energy = dropTo(energy, 10 + score / 2, 5);
-  fullness = dropTo(fullness, 5, 5);
-  int burn = (int)weight - score * 2;  // el ejercicio quema peso
-  weight = burn > 0 ? burn : 0;
-  if (score >= 5) heartUntil = millis() + HEART_MS;
-  if (score > gameHi) gameHi = score;  // nuevo record
-  addBond(2);
-  registerCare();
-  save();
-}
-
 // Kosten eines Kampfes, nach BATTLE_SPEC 6.7 in jedem Fall faellig,
 // unabhaengig vom Ausgang. Energie regeneriert nur im Schlaf, daraus ergibt
 // sich der Rhythmus "vier, fuenf Kaempfe, dann ein Nickerchen".
@@ -513,6 +497,11 @@ void Pet::battleCost() {
   energy = dropTo(energy, 15, 5);
   fullness = dropTo(fullness, 8, 5);
   hygiene = dropTo(hygiene, 5, 5);
+  // Gewicht: -5 bei Sieg UND Niederlage, gekaempft wurde ja trotzdem. Das
+  // ersetzt den Abbau des entfernten Ballspiels - ohne ihn gaebe es gegen
+  // Bonbons (+12 pro Stueck) keinen aktiven Hebel mehr, nur den passiven
+  // Verfall von 1 pro 3 Spielminuten.
+  weight = weight > 5 ? weight - 5 : 0;
   save();
 }
 
@@ -749,8 +738,10 @@ void Pet::save() {
   prefs.putUShort("medal", medals);
   prefs.putUShort("tmedal", totalMedals);
   prefs.putUShort("mstone", lastMilestone);
-  prefs.putUShort("ghi", gameHi);
-  prefs.putUShort("shi", strHi);
+  // "ghi" und "shi" (Rekorde der beiden entfernten Minispiele) werden
+  // nicht mehr geschrieben. Die alten Schluessel bleiben als Waisen in
+  // NVS liegen - Preferences ist Key-Value, das stoert nichts und braucht
+  // keine Migration, weil sie niemand mehr liest.
   prefs.putString("nick", nick);
   // Phase 5 (5.4). Preferences ist Key-Value, neue Schluessel sind also
   // gefahrlos - alte Staende lesen sie einfach als Default.
@@ -812,8 +803,6 @@ void Pet::load() {
   medals = prefs.getUShort("medal", 0);
   totalMedals = prefs.getUShort("tmedal", 0);
   lastMilestone = prefs.getUShort("mstone", 0);
-  gameHi = prefs.getUShort("ghi", 0);
-  strHi = prefs.getUShort("shi", 0);
   prefs.getString("nick", nick, sizeof(nick));
   // Phase 5 (5.4). Fehlt der Schluessel, ist es ein Stand von Schema 1 -
   // nvsVer faellt dann auf 1 und migrate() zieht es hoch.

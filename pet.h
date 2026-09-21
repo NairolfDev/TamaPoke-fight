@@ -72,8 +72,6 @@ public:
   uint16_t medals = 0, totalMedals = 0;
   uint16_t newMedal = 0;   // recien conseguida(s), para celebrar
   uint16_t lastMilestone = 0;  // hito de racha ya celebrado
-  uint16_t gameHi = 0;     // record del minijuego (del jugador)
-  uint16_t strHi = 0;      // record de golpes al saco (sin usar desde Fase 5)
 
   // --- Phase 5: Levelaufstieg durch Kampf (BATTLE_SPEC 5.4) ---
   // ageMinutes laeuft unveraendert weiter und treibt weiter Statusverfall,
@@ -137,7 +135,6 @@ public:
   bool lovesBerry(uint8_t color) const {
     return !isEgg() && (speciesId % 3) == color;  // gusto oculto por especie
   }
-  void playResult(uint8_t score);  // recompensa del minijuego (entrena VEL)
   // Kampf, BATTLE_SPEC 6.7. battleCost() ist in jedem Fall faellig,
   // battleWin()/battleLoss() je nach Ausgang.
   void battleCost();
