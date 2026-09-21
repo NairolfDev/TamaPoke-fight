@@ -626,6 +626,15 @@ bool inPetZone(int16_t x, int16_t y) {
   return x > 110 && x < 356 && y > 95 && y < 310;
 }
 
+// 4.2: Trefferzone des Hinweisbands - aber nur, solange eine Stufe offen ist.
+// Ohne offene Stufe wird das Band nicht gezeichnet, dort liegt dann blosse
+// Pet-Zone. Beide Aufrufer (Tippen und langer Druck) brauchen dieselbe
+// Geometrie, deshalb steht sie hier und nicht zweimal ausgeschrieben.
+bool inLevelBand(int16_t x, int16_t y) {
+  return pet.levelPending() && x >= LVLB_X && x <= LVLB_X + LVLB_W &&
+         y >= LVLB_Y && y <= LVLB_Y + LVLB_H;
+}
+
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
 void handleTouch() {
   static uint32_t lastPoll = 0;
@@ -651,8 +660,12 @@ void handleTouch() {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
+    // 4.2: steht ein Levelkampf an, ist das Band der Knopf, auf den die
+    // Spieler zielen. Ein langer Druck genau dort darf nicht das Freilassen
+    // anbieten - liegt der Start im Band, bleibt der Dialog aus.
     if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
+        !inLevelBand(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
       confirmUntil = millis() + 10000;
       holdFired = true;
@@ -838,8 +851,7 @@ void onTap(int16_t x, int16_t y) {
   // tocar al bicho = caricia
   // 4.2: das Hinweisband startet den Levelkampf. Muss vor inPetZone
   // stehen, weil es darin liegt - sonst wuerde gestreichelt.
-  if (pet.levelPending() && x >= LVLB_X && x <= LVLB_X + LVLB_W &&
-      y >= LVLB_Y && y <= LVLB_Y + LVLB_H) {
+  if (inLevelBand(x, y)) {
     startBattle();
     return;
   }
