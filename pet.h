@@ -35,8 +35,13 @@ enum : uint16_t {
   MED_LV10 = 1 << 0, MED_LV25 = 1 << 1, MED_LV50 = 1 << 2,
   MED_BERRY = 1 << 3, MED_STREAK7 = 1 << 4, MED_BOND = 1 << 5,
   MED_FINAL = 1 << 6, MED_FIT = 1 << 7,
+  // 6.7: Kampfmedaillen. HINTEN angehaengt, damit die acht bestehenden
+  // Bits liegen bleiben. Ein verschobenes Bit wuerde auf jedem Geraet mit
+  // Altdaten eine andere Medaille anzeigen als vergeben wurde - und es
+  // gibt keinen Weg, das nachtraeglich zu unterscheiden.
+  MED_FIRSTWIN = 1 << 8, MED_SHINYWIN = 1 << 9,
 };
-#define MED_COUNT 8
+#define MED_COUNT 10
 
 class Pet {
 public:
@@ -139,7 +144,9 @@ public:
   // Kampf, BATTLE_SPEC 6.7. battleCost() ist in jedem Fall faellig,
   // battleWin()/battleLoss() je nach Ausgang.
   void battleCost();
-  void battleWin();
+  // foeShiny entscheidet ueber MED_SHINYWIN. Das Medaillenbit ist der
+  // einzige Speicher dafuer - es gibt kein eigenes Feld.
+  void battleWin(bool foeShiny = false);
   void battleLoss();
 
   // stats de combate: base real de gen 1 x genes + nivel + entrenamiento
@@ -262,7 +269,7 @@ private:
   uint32_t today() const { return lastSeenEpoch ? lastSeenEpoch / 86400 : 0; }
   void registerCare();   // primer cuidado del dia: racha + vinculo
   void addBond(uint8_t amt);
-  void checkMedals();
+  void checkMedals(bool shinyWin = false);
   void tick();
   void hatch();
   void registerSpecies(int16_t dex);

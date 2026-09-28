@@ -1258,7 +1258,7 @@ static void btFinish(uint8_t res) {
     // zahlt er auf xpMinutes ein. Reihenfolge wichtig - erst pruefen, dann
     // aufsteigen, sonst bekommt der Levelkampf zusaetzlich noch XP.
     bool wasPending = pet.levelPending();
-    pet.battleWin();
+    pet.battleWin(btFo.shiny);  // 6.7: shiny besiegt gibt MED_SHINYWIN
     if (wasPending) { pet.levelUp(); btLevelUp = true; }
     else pet.addBattleXp(btFo.level);
     if (pmd.has(PMD_POSE)) btActPl = PMD_POSE;
@@ -1874,21 +1874,34 @@ void renderCardMedals() {
   gfx->setCursor(CX - strlen(head) * 9, 48);
   gfx->print(head);
 
+  // 6.7: zehn Medaillen, also zwei Spalten mal fuenf Reihen. Kachel 180x40
+  // bei x 48/238, y 100 + Reihe*54 - die letzte Reihe endet bei 356 und
+  // bleibt damit ueber der Seitenanzeige (374). Nachgerechnet gegen Radius
+  // 231 um (233,233): engste Stelle ist die obere Ecke der ersten Reihe mit
+  // 3,9 px Luft. Das alte Raster (x 28, Kachel 196 breit) ragte dort um
+  // 13 px hinaus.
   for (int i = 0; i < MED_COUNT; i++) {
-    int x = 28 + (i % 2) * 206, y = 104 + (i / 2) * 54;
+    int x = 48 + (i % 2) * 190, y = 100 + (i / 2) * 54;
     bool g = pet.hasMedal(1 << i);
-    gfx->fillRoundRect(x, y, 196, 44, 10, g ? UI_BAR_OK : UI_TRACK);
+    gfx->fillRoundRect(x, y, 180, 40, 10, g ? UI_BAR_OK : UI_TRACK);
     if (g) {  // marca de conseguida
-      gfx->fillCircle(x + 22, y + 22, 11, UI_BG_DAY);
+      gfx->fillCircle(x + 20, y + 20, 11, UI_BG_DAY);
       gfx->setTextColor(UI_BAR_OK);
       gfx->setTextSize(2);
-      gfx->setCursor(x + 16, y + 13);
+      gfx->setCursor(x + 14, y + 12);
       gfx->print("v");
     }
+    // Label so gross wie es passt - dasselbe Verfahren wie bei den
+    // Attackenbuttons im Kampf. Die langen Beschreibungen sprengen size 2
+    // in mehreren Sprachen ("BEERE GEFUNDEN" braucht 168 px bei 136
+    // verfuegbaren), und abgeschnittener Text ist schlechter als kleiner.
+    const char *dsc = medalDesc(i);
+    int avail = 180 - 40 - 4;
+    uint8_t ts = ((int)strlen(dsc) * 12 <= avail) ? 2 : 1;
     gfx->setTextColor(g ? UI_BG_DAY : 0x8410);
-    gfx->setTextSize(2);
-    gfx->setCursor(x + 44, y + 14);
-    gfx->print(medalDesc(i));
+    gfx->setTextSize(ts);
+    gfx->setCursor(x + 40, y + 20 - 4 * ts);
+    gfx->print(dsc);
   }
 }
 

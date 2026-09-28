@@ -148,6 +148,55 @@ Wechsel nicht springen.
   bleibt so, der Dialog kommt **nicht** wieder.
 - Ablehnen: alles bleibt. Neustart → der Dialog kommt **nicht** wieder.
 
+## A9. Die zwei neuen Medaillen
+
+`MED_FIRSTWIN` und `MED_SHINYWIN`, Bits 8 und 9. `MED_COUNT` ist 10.
+
+**Zuerst das Wichtigste: die alten Bits dürfen nicht verrutscht sein.** Die
+neuen Medaillen hängen hinten dran, aber das muss am Gerät bestätigt werden —
+ein verschobenes Bit zeigt eine andere Medaille an, als vergeben wurde, und das
+ist nachträglich nicht mehr unterscheidbar.
+
+1. `STATS` **vor** dem Flash gibt `medals=0x…`. Notieren.
+2. Nach dem Flash muss `STATS` **denselben** Wert in den unteren acht Bits
+   zeigen. `medals=0x8F` bleibt `0x8F` — nur oben können Bits dazukommen.
+3. Die Medaillenseite muss dieselben Medaillen als erreicht zeigen wie vorher.
+   Verschiebt sich eine, ist die Bitreihenfolge kaputt.
+
+Dann die neuen:
+
+- `MED_FIRSTWIN` kommt, sobald `battlesWon >= 1`. Sie hängt am Zähler, nicht am
+  Aufruf — ein Gerät, das schon gewonnene Kämpfe mitbringt, bekommt sie
+  **nachträglich beim ersten `checkMedals()`**, also gleich beim Booten. Auf
+  einem Gerät mit Kampfhistorie ist sie damit sofort da, das ist Absicht.
+- `MED_SHINYWIN`: `FOE 25 1` setzt einen shiny Pikachu als festen Gegner, dann
+  gewinnen. Die Medaille erscheint mit der üblichen Feier. `FOE 0` danach
+  wieder auf Zufall stellen.
+- Beide überleben einen Neustart (`medals` liegt unter `medal` in NVS).
+- Eine verlorene Kampf gegen einen Shiny gibt sie **nicht**.
+
+### Layout der Medaillenseite
+
+Das Raster ist neu: zwei Spalten mal **fünf** Reihen, Kachel 180×40 bei
+x 48/238, y 100 + Reihe·54. Die letzte Reihe endet bei y 356, die
+Seitenanzeige sitzt bei 374.
+
+- Alle **zehn** Kacheln sichtbar, keine überlappt die Seitenanzeige.
+- Nichts ragt über den runden Rand. Engste Stelle ist rechnerisch die obere
+  Ecke der ersten Reihe mit **3,9 px** Luft — das ist knapp, also genau dort
+  hinsehen.
+- Der Kacheltext wird pro Kachel so groß gesetzt, wie er passt (dasselbe
+  Verfahren wie bei den Attackenbuttons). In jeder Sprache passt der längste
+  Text mindestens bei der kleinen Größe, **es darf nirgends abgeschnitten
+  sein**. Auf Deutsch fallen drei von zehn auf die kleine Größe, auf
+  Portugiesisch nur eine — gemischte Größen im Raster sind erwartet.
+- Der Kopf zeigt jetzt `%u/10`.
+- Alle sechs Sprachen einmal durchschalten.
+
+Nebenbei behebt das Raster zwei Fehler des alten: dort ragte die oberste
+Kachelreihe 13 px über den Rand, und auf Deutsch und Italienisch lief der
+Text 16 px über die Kachel hinaus.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft
@@ -209,12 +258,7 @@ fünf antippbar — auch die unterste Zeile.
 ## B6. Statuskarte, restliche Seiten
 
 - Werteseite: Gewicht dabei, ändert sich nach Kämpfen.
-- Medaillenseite: acht Medaillen, `MED_COUNT` passt zur Anzahl Felder.
-  **Bekannter Fehler:** die oberste Kachelreihe ragt über den runden Rand
-  (Kachel x 28..430, erlaubt bei y 104 nur 41,4..424,6), und auf Deutsch und
-  Italienisch läuft der Kacheltext 16 px über die Kachel hinaus
-  (`BEERE GEFUNDEN` = 168 px in 152 px Platz). Ansehen und entscheiden, ob es
-  am Gerät stört.
+- Medaillenseite: siehe A9, die ist neu.
 - Fortschrittsseite zeigt das nächste Level und ob eine Stufe offen ist.
 - Auf allen vier Seiten: nichts am runden Rand abgeschnitten.
 

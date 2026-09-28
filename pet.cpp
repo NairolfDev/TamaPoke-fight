@@ -306,7 +306,7 @@ void Pet::addBond(uint8_t amt) {
   bondToday += amt;
 }
 
-void Pet::checkMedals() {
+void Pet::checkMedals(bool shinyWin) {
   if (isEgg()) return;
   uint16_t before = medals;
   if (level() >= 10) medals |= MED_LV10;
@@ -317,6 +317,10 @@ void Pet::checkMedals() {
   if (bond >= 100) medals |= MED_BOND;
   if (DEX_TBL[speciesId].evolvesTo == 0) medals |= MED_FINAL;
   if (weight == 0 && level() >= 5 && careMistakes == 0) medals |= MED_FIT;
+  // 6.7: haengt an battlesWon, nicht am Aufruf - ein Geraet, das schon
+  // gewonnene Kaempfe mitbringt, bekommt die Medaille nachtraeglich.
+  if (battlesWon >= 1) medals |= MED_FIRSTWIN;
+  if (shinyWin) medals |= MED_SHINYWIN;
   uint16_t gained = medals & ~before;
   if (gained) {
     for (uint16_t m = gained; m; m &= (m - 1)) totalMedals++;
@@ -509,7 +513,7 @@ void Pet::battleCost() {
 // gewaehlten Kampfwert. Damit bleibt der ATK-Pfad erhalten, den vorher das
 // Sackhauen bedient hat - nur breiter, weil auch DEF und SPD dran kommen.
 // Kein Care-Slip-up, wie 6.7 es ausdruecklich festhaelt.
-void Pet::battleWin() {
+void Pet::battleWin(bool foeShiny) {
   if (ceremony != CER_NONE || isEgg()) return;
   joy = clamp100(joy + 8);
   addBond(1);
@@ -524,6 +528,9 @@ void Pet::battleWin() {
   if (*stat < 100) (*stat)++;
   heartUntil = millis() + HEART_MS;
   registerCare();
+  // MED_FIRSTWIN und MED_SHINYWIN haengen am Sieg, also hier pruefen -
+  // checkMedals() feiert sie dann mit der vorhandenen Medaillen-Animation.
+  checkMedals(foeShiny);
   save();
 }
 
