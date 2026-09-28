@@ -54,8 +54,14 @@ Die Junction $sketch fehlt. Einmalig anlegen:
 }
 # Zeigt die Junction auch wirklich auf DIESES Repo? Sonst baut man still den
 # falschen Stand - mit gruenem Exitcode und plausibler Groesse.
-$target = (Get-Item $sketch).Target
-if ($target -and $target -ne $repo) {
+#
+# .Target ist ein String[], kein String. Ohne das [0] vergleicht man ein Array
+# gegen einen String, und PowerShell liefert dann eine gefilterte Liste statt
+# eines Boolean - im Einzelelement-Fall geht das zufaellig gut, aber verlassen
+# sollte man sich darauf nicht. Trailing Backslash haengt von der
+# PowerShell-Version ab, deshalb beide Seiten trimmen.
+$target = @((Get-Item $sketch).Target)[0]
+if ($target -and $target.TrimEnd('\') -ne $repo.TrimEnd('\')) {
   throw "Die Junction $sketch zeigt auf $target, nicht auf $repo."
 }
 
