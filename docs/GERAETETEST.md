@@ -1,11 +1,21 @@
 # Gerätetest
 
-Was am Gerät zu prüfen ist, was headless nicht geht. Stand: alle Änderungen
-seit dem letzten Flash (fw v1.5, Commit `fdb24a7`) — also die Phasen 1 bis 5
-des Kampfsystems.
+Was am Gerät zu prüfen ist, weil es headless nicht geht.
 
-Die Liste ist eine Reihenfolge, keine Sammlung: ein Punkt setzt voraus, dass
-der vorige durch ist. Neue Features hängen ihre Prüfschritte hinten an.
+**Auf dem Gerät liegt `d8c8a40` (Phase 5).** Die NVS-Migration 1 → 2 ist dort
+schon gelaufen. Ungetestet ist damit alles, was danach kam:
+
+| Commit | Was davon ans Gerät muss |
+|---|---|
+| `8e6312f` | Konsolenbefehle `BOND`, `ENE`, `FOE` |
+| `2b51fdd` | Ballspiel entfernt, Hinweisband, Kampfbutton mit zwei Zuständen, Levelkampf-Leiste, Aufstiegsfeier, Gewicht −5 im Kampf |
+| `fc0ed9a` | anstehende Attacke überlebt den Neustart |
+| `2391b28` | langer Druck im Hinweisband löst kein Freilassen aus |
+| *dieser* | Commit-Hash in Bootzeile und `HEALTH` |
+
+Teil A ist die Pflicht — das ist neu und noch nie auf Hardware gelaufen.
+Teil B liegt schon drauf, wurde aber nie systematisch durchgegangen; das ist
+Nacharbeit, wenn Zeit ist.
 
 ## Vor dem Anfangen
 
@@ -24,182 +34,193 @@ nachsehen, nicht raten.
 
 ---
 
-## 1. Migration: das alte Pokémon überlebt das Update
+# Teil A — neu seit dem Flash
 
-**Das ist der einzige Test, der nur ein einziges Mal geht.** Er braucht ein
-Gerät mit Altdaten aus fw v1.5. Ist einmal `WIPE` gelaufen oder hat das Gerät
-schon mit dem neuen Schema gebootet, ist die Gelegenheit vorbei. Also zuerst.
+## A1. Welcher Stand liegt überhaupt drauf?
 
-`nvsVer` steigt in diesem Update von 1 auf 2 (`pet.h:9`), `migrate()` in
-`pet.cpp:634` zieht `levelsWon`, `xpMinutes` und `finalFormAt` nach.
+Der erste Test, weil jeder folgende davon abhängt. `FW_VERSION` steht seit
+Phase 0 auf `1.5` und sagt deshalb nichts; der kurze Commit-Hash kommt jetzt
+automatisch beim Kompilieren dazu.
 
-1. **Vor** dem Flashen `STATS` absetzen und die Ausgabe sichern — Spezies,
-   Level, Gene, Bindung, Streak, Medaillen, Spitzname.
-2. Flashen. **Kein `WIPE`.**
-3. `STATS` erneut. Zu prüfen:
-   - Spezies, Gene, Spitzname, Shiny, Streak, Bindung, Medaillen unverändert
-   - Level gleich oder höchstens eins daneben (`levelsWon = ageMinutes / 60`)
-   - Beim Boot erscheint auf Serial `nvs 1 -> 2: levelsWon=… finalFormAt=…`
-4. Der Hauptschirm zeigt das Pokémon, nicht die Starterauswahl.
+1. Beim Booten erscheint auf Serial `TamaPoke fw v1.5 (<hash>)`.
+2. `HEALTH` endet auf `fw=1.5/<hash>`.
+3. Der Hash muss dem entsprechen, was `git rev-parse --short HEAD` im Repo
+   sagt — also dem Stand, den du gerade geflasht hast.
 
-Schlägt das fehl, hier anhalten und melden — alles Weitere ist dann egal.
+Steht dort **`unbekannt`**, wurde ohne `tools\build.ps1` gebaut und der Hash
+fehlt im Binary. Steht dort ein Hash mit **`-dirty`**, war der Arbeitsbaum beim
+Bauen nicht sauber — dann ist der Flash *nicht* reproduzierbar, der Hash allein
+sagt nicht, was drin ist.
 
-## 2. Sprache
+Ab hier gilt: nach jedem weiteren Flash einmal `HEALTH` und den Hash lesen,
+bevor irgendetwas anderes geprüft wird. Genau diese Verwechslung hat schon
+einmal eine Stunde mit der Werksdemo gekostet.
 
-`LANG_DEFAULT` ist jetzt `LANG_DE` (`i18n.h:11`), gelesen wird aber
-`prefs.getUChar("lang", LANG_DEFAULT)`.
+## A2. Das Spielen-Icon startet den Kampf
 
-- Gerät aus Punkt 1 (Altdaten): behält seine bisherige Sprache.
-- Nach `WIPE`: startet auf **Deutsch**.
-- In den Einstellungen durch alle sechs Sprachen schalten (ES, EN, FR, DE, IT,
-  PT) und auf jeder einmal Hauptschirm, Statuskarte und Kampfschirm ansehen.
-  Gesucht wird **verrutschter Text** — ein Label, das nicht zu seinem Feld
-  passt, heißt, dass `StrId` und die `STRINGS`-Tabelle auseinanderlaufen.
-- Kein Umlaut darf als Kästchen oder Lücke erscheinen. Der GFX-Font hat keine;
-  gefundene Stellen sind Fehler in `i18n.cpp`, nicht im Font.
+Das Ballspiel ist weg (`Pet::playResult` samt `gameHi`/`strHi` entfernt). Auf
+dem geflashten Stand `d8c8a40` startet das Spielen-Icon noch das Ballspiel —
+nach dem Flash muss es den Kampf öffnen.
 
-## 3. Starterauswahl
+- Spielen (202/404) → Kampfschirm, kein Minispiel.
+- Füttern (140/390), Licht (264/404), Baden (326/390) tun weiter das ihre.
+- Schlafend oder als Ei startet kein Kampf.
+- `STATS` nach einem Kampf: `peso=` ist gefallen, siehe A4.
 
-Fünf Starter statt drei, `STARTER_DEX` mit Pikachu (25) und Tragosso (104).
+Die alten NVS-Schlüssel `ghi` und `shi` bleiben als Waisen liegen. Das ist
+Absicht und braucht keine Migration — nur nachsehen, dass nichts anderes
+verrutscht ist: `STATS` muss Streak, Bindung und Medaillen unverändert zeigen.
 
-1. `WIPE` (löscht NVS und startet neu).
-2. Die Auswahl zeigt **fünf Zeilen**. Zu prüfen: alle fünf Namen vollständig
-   lesbar, keine am runden Rand abgeschnitten, alle fünf antippbar — auch die
-   unterste.
-3. Einen Starter wählen, `STATS` bestätigt die Spezies.
+## A3. Hinweisband und Levelkampf
 
-## 4. Hauptschirm: die Icons
+Der sichtbare Teil von `2b51fdd`. `LVL 5` setzen, dann warten, bis eine Stufe
+offen ist (für den Test `MINUTES_PER_LEVEL` in `pet.h` runtersetzen).
 
-Sackhauen und Ballspiel sind raus. Das **Spielen-Icon** (202/404) startet jetzt
-einen Kampf.
+1. **Hinweisband** `KAMPF BEREIT` auf dem Hauptschirm, x 113–353, y 106–134.
+   Es pulsiert (Breite atmet ±3 px).
+2. Band **antippen** → der Kampf startet direkt.
+3. Im Kampfschirm die **Levelkampf-Leiste** bei (143,56)–(323,74).
+4. Kampf gewinnen → **Aufstiegsfeier**: das Wort groß bei y 150, die neue
+   Levelzahl pulsierend bei y 208.
+5. `STATS` bestätigt das neue Level, das Band ist weg.
+6. Ein zweiter Sieg direkt danach gibt **keinen** zweiten Aufstieg (kein
+   Banking) — er gibt XP.
 
-- Füttern (140/390), Licht (264/404), Baden (326/390) tun weiter, was sie
-  sollen.
-- Spielen öffnet den Kampfschirm, nicht das alte Minispiel.
-- Schlafend oder als Ei startet kein Kampf (`startBattle()` steigt früh aus).
+## A4. Langer Druck im Hinweisband
 
-## 5. Freier Kampf
+`2391b28`. Genau dorthin tippen Spieler künftig.
 
-`LVL 10` setzen, damit es ein paar Attacken gibt, dann über das Spielen-Icon
-starten.
+- Stufe offen, Finger 3 s ruhig im Band halten → **kein** Freilassen-Dialog.
+- Stufe offen, 3 s auf dem Sprite darunter (etwa y 200) → Dialog erscheint wie
+  gehabt.
+- Keine Stufe offen, 3 s im Band → Dialog erscheint. Dort liegt dann blosse
+  Pet-Zone, es darf kein Bedienweg verloren gehen.
 
-Zu prüfen:
+## A5. Kampfkosten mit Gewicht
+
+`battleCost()` zieht bei **jedem** Kampf ab, auch bei Flucht: −15 Energie,
+−8 Futter, −5 Hygiene, **−5 Gewicht**. Das Gewicht ist der neue Teil — es
+ersetzt den Abbau des entfernten Ballspiels und ist der einzige aktive Hebel
+gegen Bonbons (+12 pro Stück).
+
+1. `STATS`, die vier Werte notieren.
+2. Kampf starten und **fliehen**.
+3. `STATS` — genau um diese Beträge gefallen.
+4. Ein paar Bonbons füttern, dann zwei Kämpfe: das Gewicht muss wieder sinken.
+5. Sieg: +8 Freude, Bindung +1, ein Trainingspunkt auf ATK, DEF oder SPD
+   (zufällig, in `STATS` als `tr=`), dazu XP oder Aufstieg.
+6. Niederlage: −5 Freude, **kein** Versäumnis (`desc=` bleibt gleich), sofort
+   wieder kämpfbar.
+
+## A6. Kampfbutton auf der Statuskarte
+
+Nach oben wischen, Seite 1. Der Button hat zwei Zustände auf derselben Fläche
+(96,300)–(370,340): normal (freier Kampf) und auffällig, wenn eine Stufe offen
+ist. Beide antippen, beide müssen den Kampf starten. Das Layout darf beim
+Wechsel nicht springen.
+
+## A7. Die neuen Konsolenbefehle
+
+`8e6312f`. Sie sind das Werkzeug für alles Weitere.
+
+- `BOND 99` → `bond=99 rettung=33%`. Dann mehrere Kämpfe: die K.-o.-Rettung
+  muss sich zeigen, das Pokémon bleibt bei 1 HP stehen. Einmal pro Kampf.
+- `BOND 0` → keine Rettung.
+- `ENE 10` → `ene=10 erschoepft=1`. Im Kampf erscheint `ERSCHOEPFT`, ATK und
+  SPD sind um 25 % gesenkt. Der Kampf startet **trotzdem** — Erschöpfung
+  sperrt nicht.
+- `ENE 80` → kein Band.
+- `FOE 25` → fester Gegner Pikachu. `FOE 25 1` → shiny. `FOE 0` → wieder
+  zufällig. Damit sind Kämpfe reproduzierbar.
+
+## A8. Anstehende Attacke überlebt den Neustart
+
+`fc0ed9a`. Auf ein Level bringen, auf dem eine neue Attacke ansteht
+(`moves.h`), bei vier belegten Slots.
+
+- Nach dem Aufstiegssieg öffnet der Lerndialog. Alle vier alten Attacken plus
+  der Ablehnen-Knopf antippbar und im Radius.
+- **Der eigentliche Test:** Dialog offen lassen und **vor** der Entscheidung
+  neu starten (Reset oder Port neu öffnen). Der Dialog muss **wiederkommen**.
+  Tut er das nicht, ist die Attacke verloren — das Level steigt kein zweites
+  Mal, und der Spieler merkt es nie. Der Schlüssel heißt `pendmv`.
+- Ersetzen: Statuskarte zeigt die neue Attacke im gewählten Slot. Neustart →
+  bleibt so, der Dialog kommt **nicht** wieder.
+- Ablehnen: alles bleibt. Neustart → der Dialog kommt **nicht** wieder.
+
+---
+
+# Teil B — liegt drauf, nie systematisch geprüft
+
+Nacharbeit. Nichts davon ist neu, aber auch nichts davon ist abgehakt.
+
+## B1. Hat mein Pokémon den Phase-5-Flash überlebt?
+
+Offener Punkt, den nur du beantworten kannst. Wenn ja: die Migration 1 → 2 hat
+funktioniert und dieser Abschnitt ist abgehakt. Wenn nein, gehört hierher, was
+genau verloren war — dann steckt in `migrate()` (`pet.cpp:634`) ein Fehler, der
+gefunden werden muss, bevor je wieder ein Schema geändert wird.
+
+`STATS` zeigt den heutigen Stand: Spezies, Level, Gene, Bindung, Streak,
+Medaillen, Spitzname.
+
+## B2. Sprache
+
+`LANG_DEFAULT` ist `LANG_DE` (`i18n.h:11`), gelesen wird
+`prefs.getUChar("lang", LANG_DEFAULT)` — bestehende Geräte behalten also ihre
+Einstellung, nur Neuinstallationen starten deutsch.
+
+- Durch alle sechs Sprachen schalten (ES, EN, FR, DE, IT, PT) und auf jeder
+  Hauptschirm, Statuskarte und Kampfschirm ansehen. Gesucht wird **verrutschter
+  Text** — ein Label, das nicht zu seinem Feld passt, heißt, dass `StrId` und
+  die `STRINGS`-Tabelle auseinanderlaufen.
+- Kein Umlaut darf als Kästchen oder Lücke erscheinen.
+
+## B3. Starterauswahl
+
+Fünf Starter inkl. Pikachu (25) und Tragosso (104). Nur nach `WIPE` sichtbar —
+also erst machen, wenn B1 beantwortet und das Pokémon entbehrlich ist.
+
+Alle fünf Namen vollständig lesbar, keiner am runden Rand abgeschnitten, alle
+fünf antippbar — auch die unterste Zeile.
+
+## B4. Freier Kampf
+
 - Gegner oben rechts mit Namen und Level, HP-Balken bei (252,96), eigener bei
   (58,298).
 - **Beide Sprites sichtbar.** Fehlt der Gegner, war zu wenig PSRAM frei —
   `HEALTH` vor und nach dem Kampfstart vergleichen. Unter 512 KB freiem PSRAM
   kämpft die Firmware absichtlich ohne Gegnerbild, das ist kein Absturz.
-- Attackenbuttons: **so viele wie das Pokémon Attacken hat**, gleichmäßig über
-  die Breite. Keine grauen Platzhalter. Jedes Label lesbar, notfalls gekürzt —
-  aber nicht über den Buttonrand hinaus.
-- AP-Zähler unter jedem Label zählt runter.
-- Sind alle AP leer, bleibt **genau ein** Verzweifler-Button.
-- Fluchtbutton vorhanden und er beendet den Kampf.
-- Nach dem Kampf ist der Gegnersprite wieder entladen: `HEALTH` zeigt wieder
-  das PSRAM von vorher.
+- Attackenbuttons: **so viele wie Attacken**, gleichmäßig über die Breite,
+  keine grauen Platzhalter. Labels lesbar, notfalls gekürzt, aber nicht über
+  den Buttonrand hinaus.
+- AP-Zähler zählt runter. Alle AP leer → **genau ein** Verzweifler-Button.
+- Fluchtbutton beendet den Kampf.
+- Nach dem Kampf ist der Gegnersprite entladen: `HEALTH` zeigt wieder das
+  PSRAM von vorher.
 
-Feste Gegner für reproduzierbare Läufe: `FOE 25` (Pikachu), `FOE 25 1`
-(shiny), `FOE 0` schaltet zurück auf Zufall.
+## B5. AP zwischen den Kämpfen
 
-## 6. Kampfkosten und Belohnung
+1. Kampf mit halbleeren AP beenden.
+2. Neuer Kampf → die AP stehen noch da.
+3. Schlafen lassen und aufwecken → alle AP voll (`refillPp`).
+4. Zwischendurch Reset → die AP sind immer noch da, nicht zurückgesetzt.
 
-`battleCost()` zieht bei **jedem** Kampf ab, auch bei Flucht: −15 Energie,
-−8 Futter, −5 Hygiene, −5 Gewicht.
+## B6. Statuskarte, restliche Seiten
 
-1. `STATS`, Werte notieren.
-2. Kampf starten und **fliehen**.
-3. `STATS` — die vier Werte müssen genau um diese Beträge gefallen sein.
-4. Kampf gewinnen: +8 Freude, Bindung +1, ein Trainingspunkt auf ATK, DEF oder
-   SPD (zufällig, in `STATS` als `tr=…`), dazu XP oder Aufstieg.
-5. Kampf verlieren: −5 Freude, **kein** Versäumnis (`desc=` in `STATS` bleibt
-   gleich), sofort wieder kämpfbar.
-
-## 7. Erschöpfung und Bindung
-
-Kämpfen ist nie gesperrt, Erschöpfung kostet nur Werte.
-
-- `ENE 10`, dann Kampf: das Band `ERSCHOEPFT` erscheint, ATK und SPD sind um
-  25 % gesenkt. Der Kampf startet trotzdem.
-- `ENE 80`: kein Band.
-- `BOND 99`, dann mehrere Kämpfe: die K.o.-Rettung (33 % Chance, einmal pro
-  Kampf) muss sich zeigen — das Pokémon bleibt bei 1 HP stehen.
-- `BOND 0`: keine Rettung.
-
-## 8. Levelaufstieg
-
-Level steigt **nur** durch gewonnene Kämpfe. Genau eine Stufe ist offen, kein
-Banking, `xpMinutes` friert ein, solange die Stufe offen ist.
-
-1. `LVL 5`, dann warten, bis `LVL_REQ` erfüllt ist (`lvlReq()` steht in der
-   `LVL`-Ausgabe). Für den Test `MINUTES_PER_LEVEL` in `pet.h` runtersetzen.
-2. **Hinweisband** `KAMPF BEREIT` erscheint auf dem Hauptschirm bei
-   x 113–353, y 106–134. Es pulsiert.
-3. Band **antippen** → der Kampf startet direkt.
-4. Im Kampfschirm steht die **Levelkampf-Leiste** bei (CX−90, 56), 180×18.
-5. Kampf gewinnen → **Aufstiegsfeier**: das Wort groß bei y 150, die neue
-   Levelzahl pulsierend bei y 208.
-6. `STATS` bestätigt das neue Level. Das Band ist weg.
-7. Ein zweiter Sieg direkt danach gibt **keinen** zweiten Aufstieg (kein
-   Banking) — er gibt XP.
-
-### 8b. Langdruck im Hinweisband
-
-Genau dorthin tippen Spieler künftig. Ein 3-Sekunden-Druck im Band darf den
-Freilassen-Dialog **nicht** auslösen, solange eine Stufe offen ist.
-
-- Stufe offen, Finger 3 s ruhig im Band halten → kein `SOLTAR?`-Dialog.
-- Stufe offen, 3 s auf dem Sprite darunter (etwa y 200) → Dialog erscheint
-  wie gehabt.
-- Keine Stufe offen, 3 s im Band → Dialog erscheint (dort ist dann nur die
-  Pet-Zone).
-
-## 9. Lerndialog
-
-Steigt das Level und sind alle vier Attackenslots belegt, kommt die Wahl:
-vergessen und ersetzen oder ablehnen.
-
-- Auf ein Level bringen, auf dem eine neue Attacke ansteht (`LVL n` und die
-  Movepool-Tabelle in `moves.h`), vier Slots belegt.
-- Nach dem Aufstiegssieg öffnet der Dialog. Alle vier alten Attacken plus der
-  Ablehnen-Knopf müssen antippbar sein und im Radius liegen.
-- Ersetzen: `STATS`/Statuskarte zeigt die neue Attacke im gewählten Slot.
-- Ablehnen: alles bleibt, wie es war.
-- **Der Dialog darf nicht wiederkommen**, wenn man ihn einmal entschieden hat
-  — auch nicht nach einem Neustart.
-- Gegenprobe, und die ist der eigentliche Punkt: Dialog aufgehen lassen und
-  **vor** der Entscheidung neu starten (Reset oder Port neu öffnen). Der
-  Dialog muss **wiederkommen**. Tut er das nicht, ist die anstehende Attacke
-  verloren — das Level steigt kein zweites Mal, und der Spieler merkt es nie.
-  `pendingMove` liegt dafür unter dem NVS-Schlüssel `pendmv`.
-
-## 10. AP zwischen den Kämpfen
-
-AP bleiben über den Kampf hinaus stehen und füllen sich erst beim Aufwachen.
-
-1. Einen Kampf mit halbleeren AP beenden.
-2. Neuen Kampf starten → die AP stehen noch da, wo sie waren.
-3. Schlafen lassen und aufwecken → alle AP voll.
-4. Zwischendurch neu starten (Reset) → die AP sind immer noch da, nicht
-   zurückgesetzt.
-
-## 11. Statuskarte
-
-Nach oben wischen, dann seitlich durch die vier Seiten.
-
-- **Seite 1** hat den Kampfbutton. Er hat **zwei Zustände**: normal (freier
-  Kampf) und der auffällige, wenn eine Stufe offen ist. Beide antippen.
-- Seite mit den Werten: Gewicht ist dabei und ändert sich nach Kämpfen.
-- Medaillenseite: die acht Medaillen, `MED_COUNT` stimmt mit der Anzahl
-  gezeichneter Felder überein.
+- Werteseite: Gewicht dabei, ändert sich nach Kämpfen.
+- Medaillenseite: acht Medaillen, `MED_COUNT` passt zur Anzahl Felder.
+  **Bekannter Fehler:** die oberste Kachelreihe ragt über den runden Rand
+  (Kachel x 28..430, erlaubt bei y 104 nur 41,4..424,6), und auf Deutsch und
+  Italienisch läuft der Kacheltext 16 px über die Kachel hinaus
+  (`BEERE GEFUNDEN` = 168 px in 152 px Platz). Ansehen und entscheiden, ob es
+  am Gerät stört.
 - Fortschrittsseite zeigt das nächste Level und ob eine Stufe offen ist.
 - Auf allen vier Seiten: nichts am runden Rand abgeschnitten.
 
-## 12. BSIM-Abnahme
+## B7. BSIM-Abnahme
 
-Der einzige Punkt, der die Engine gegen den Simulator stellt. Er ist der
-Grund, warum `battle_sim.py` existiert.
-
-Auf dem Gerät:
+Der einzige Punkt, der die Engine gegen den Simulator stellt.
 
 ```
 LVL 25
@@ -208,28 +229,27 @@ BSIM 2000 25
 
 Referenz aus `tools/battle_sim.py` (Level 25, Spieler elite gegen wild,
 bond 0, spread 0): **55,6 %** mit Standardseed. Das Gerät muss **±3
-Prozentpunkte** treffen, also 52,6 bis 58,6 %.
-
-Weicht es mehr ab, laufen Engine und Simulator auseinander — dann ist eine
-Änderung nur in einer der beiden Dateien gelandet.
+Prozentpunkte** treffen, also 52,6 bis 58,6 %. Weicht es mehr ab, laufen
+Engine und Simulator auseinander — dann ist eine Änderung nur in einer der
+beiden Dateien gelandet.
 
 Dazu die Heap-Probe: `HEALTH` vor und nach `BSIM 1000 25`. `heap=` und `min=`
 dürfen **kein einziges Byte** gewandert sein. Die Engine allokiert nichts.
 
-## 13. Anti-Burn-in und der runde Rand
-
-Zum Schluss, weil es Zeit braucht.
+## B8. Anti-Burn-in und der runde Rand
 
 - 90 s nicht anfassen → Schirm dimmt (Stufe 1). 5 min → fast aus (Stufe 2).
 - Der Tipp, der aufweckt, darf **nichts auslösen** (`swallowGesture`) —
   besonders nicht im Hinweisband und nicht auf einem Icon.
-- Alle neuen Elemente gegen den Rand prüfen: Mittelpunkt (233,233), Radius
-  231. Rechnerisch liegen alle im Radius, aber das AMOLED hat die letzte
-  Stimme:
-  - Hinweisband: Ecken (113,106) und (353,134) → 175 bzw. 155 Abstand
-  - Levelkampf-Leiste: (143,56)–(323,74) → 194 bzw. 179
+- Neue Elemente gegen den Rand: Mittelpunkt (233,233), Radius 231.
+  Rechnerisch liegen alle drin, aber das AMOLED hat die letzte Stimme:
+  Jeweils der größte Eckabstand:
+  - Hinweisband (113,106)–(353,134) → **174,7** bei Ecke (353,106)
+  - Levelkampf-Leiste (143,56)–(323,74) → **198,6** bei (323,56)
+  - Kampfbutton Statuskarte (96,300)–(370,340) → **173,8** bei (370,340)
   - Attackenbuttons und Fluchtbutton auf dem unteren Bogen
-  - Starterauswahl, fünfte Zeile
+  - `drawStreakBadge()` bei (26,16) → **299,9**, also 69 px **außerhalb**
+    Radius 231. Kann dort nicht sichtbar sein. Nachsehen, nicht anfassen.
 
 ---
 
