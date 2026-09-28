@@ -23,10 +23,19 @@ Upstream: `socquique/TamaPoke`. Dieser Fork fügt ein Kampfsystem hinzu.
 
 ## Build
 
-```bash
-FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
-arduino-cli compile --fqbn "$FQBN" .
-arduino-cli upload -p /dev/ttyACM0 --fqbn "$FQBN" .
+Aus einer normalen PowerShell im Repo-Ordner:
+
+```
+tools\build.ps1
+```
+
+Das Skript ermittelt den Git-Stand, schreibt `version.h` und baut dann über
+die Junction. **Es ist der dokumentierte Weg, weil nur es den Commit-Hash ins
+Binary bringt** — siehe den nächsten Abschnitt. Ein anderer Build-Pfad geht
+über `-BuildPath`:
+
+```
+tools\build.ps1 -BuildPath build\schnell
 ```
 
 **Nach jeder Änderung kompilieren.** Ein Compile-Fehler auf einem Embedded-Target
@@ -34,6 +43,26 @@ kostet den Nutzer einen Flash-Zyklus zum Merken. Nie ungetesteten Code committen
 
 Benötigte Libraries: `Arduino_GFX` (moononournation), `SensorLib` (Lewis He),
 `XPowersLib` (Lewis He), `ESP_I2S` (im ESP32-Core enthalten).
+
+### Welcher Stand liegt auf dem Gerät?
+
+`FW_VERSION` steht seit Phase 0 auf `1.5` und sagt deshalb nichts darüber, was
+tatsächlich geflasht ist. Der kurze Commit-Hash kommt automatisch dazu:
+
+- `tools/build.ps1` schreibt vor jedem Build `version.h` mit
+  `#define FW_GIT "<hash>"`, plus `-dirty`, wenn der Arbeitsbaum nicht sauber
+  war. Ein `-dirty`-Build ist **nicht reproduzierbar** — der Hash allein sagt
+  dann nicht, was drin ist.
+- `version.h` ist gitignored. Sie wird nie committet und nie von Hand editiert.
+- Der Sketch bindet sie über `__has_include` ein und fällt ohne sie auf
+  `FW_GIT "unbekannt"` zurück. Wer ohne das Skript baut, **sieht** das am
+  Gerät — das ist Absicht, sichtbar falsch ist besser als still falsch.
+- Sichtbar wird der Hash in der Bootzeile (`TamaPoke fw v1.5 (abc1234)`) und
+  am Ende der `HEALTH`-Ausgabe (`fw=1.5/abc1234`).
+
+Arduino CLI hat keinen Pre-Build-Hook, der im Sketch-Ordner liegt — den gibt
+es nur in der `platform.txt` des Cores, also außerhalb des Repos und weg beim
+nächsten Core-Update. Deshalb der Wrapper und nicht ein Hook.
 
 ### Der Sketch-Ordner muss `TamaPoke` heißen
 
@@ -109,6 +138,21 @@ python3 tools/send_sd.py --port COM3
 
 Ohne die Angabe sucht `find_port()` nach `/dev/cu.usbmodem*` — ein macOS-Pfad —
 und bricht mit „no encuentro la placa" ab. Braucht `pip install pyserial`.
+
+### Zeilenenden
+
+**Alle Quelldateien im Repo sind CRLF** — `pet.cpp`, `pet.h`, `TamaPoke.ino`,
+`CLAUDE.md`. Ein mehrzeiliges Suchmuster mit `\n` greift deshalb nicht.
+
+Mehrzeilige Patches als Python-Skript**datei**, nicht als Heredoc: ein Heredoc
+zerbricht `\n`, und der Patch findet dann sein eigenes Muster nicht mehr. Das
+Skript liest binär, normalisiert auf `\n`, patcht, und schreibt das
+ursprüngliche Zeilenende zurück. Jedes Muster vorher auf **genau einen**
+Treffer prüfen und sonst abbrechen, bevor etwas geschrieben wird.
+
+Keine breiten `sed`-Ersetzungen. Einmal hat ein `sed` den NEIN-Button im
+Freilassen-Dialog mitgeändert, einmal hat ein Löschbereich die `BT_*`-Defines
+mitgenommen. Nach jedem Eingriff `git diff` lesen.
 
 ## Generierte Dateien — nicht von Hand editieren
 

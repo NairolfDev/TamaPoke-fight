@@ -27,6 +27,18 @@
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
 #define FW_VERSION "1.5"
 
+// Kurzer Commit-Hash des Builds, damit man am Geraet sieht, welcher Stand
+// draufliegt - FW_VERSION allein sagt das nicht, die steht seit Phase 0 auf
+// 1.5. tools/build.ps1 schreibt version.h vor jedem Build, "-dirty" haengt
+// dran, wenn der Arbeitsbaum nicht sauber war. Fehlt die Datei, steht
+// "unbekannt" da: sichtbar falsch ist besser als still falsch.
+#if __has_include("version.h")
+#include "version.h"
+#endif
+#ifndef FW_GIT
+#define FW_GIT "unbekannt"
+#endif
+
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 Arduino_CO5300 *panel = new Arduino_CO5300(
@@ -189,7 +201,7 @@ void setup() {
   // monitor serie abierto en el host (el bufer TX del USB CDC se llena
   // y nadie lo vacia) -> con timeout 0 los mensajes se descartan
   Serial.setTxTimeoutMs(0);
-  Serial.printf("TamaPoke fw v%s\n", FW_VERSION);
+  Serial.printf("TamaPoke fw v%s (%s)\n", FW_VERSION, FW_GIT);
   loadLang();  // idioma guardado (ES por defecto)
   Wire.begin(IIC_SDA, IIC_SCL);
   // CST9217 (tactil), AXP2101 (PMU) y PCF85063 (RTC) comparten este bus I2C.
@@ -572,9 +584,10 @@ void handleSerial() {
     Serial.println();
     Serial.println("DONE");
   } else if (line == "HEALTH") {
-    Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d\n",
+    Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d fw=%s/%s\n",
                   (unsigned long)(millis() / 1000), ESP.getFreeHeap(),
-                  ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded);
+                  ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded,
+                  FW_VERSION, FW_GIT);
     Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
