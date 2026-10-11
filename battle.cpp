@@ -133,7 +133,8 @@ void fighterFromRival(Fighter &f, const Rival &r, uint8_t level) {
   f.isRival = true;
 }
 
-// 6.3: die Spanne schrumpft am Boden, statt unten abgeschnitten zu werden.
+// 6.3 (entspannt): Gegnerlevel zwischen Spielerlevel - spread und dem
+// Spielerlevel, nie darueber. Die Spanne schrumpft am Boden, Untergrenze 1.
 void foeLevelRange(uint8_t playerLevel, uint8_t spread, uint8_t *low,
                    uint8_t *high) {
   int16_t reach = (int16_t)spread;
@@ -142,7 +143,7 @@ void foeLevelRange(uint8_t playerLevel, uint8_t spread, uint8_t *low,
   int16_t lo = (int16_t)playerLevel - reach;
   if (lo < 1) lo = 1;
   if (low) *low = (uint8_t)lo;
-  if (high) *high = (uint8_t)(playerLevel + reach);
+  if (high) *high = playerLevel;  // 6.3 entspannt: nie ueber dem Spieler
 }
 
 uint8_t pickFoeLevel(uint8_t playerLevel, uint8_t spread) {

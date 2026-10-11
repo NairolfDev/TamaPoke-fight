@@ -305,6 +305,14 @@ Levels, Untergrenze 1. Ein Sieg setzt zurück.
 4. Einen Kampf gewinnen → `pech=0`, die Gegner sind wieder auf 28–30.
 5. Neustart zwischendurch → `pech` bleibt (liegt unter `lstrk` in NVS).
 
+## A15. Gegner nie über Spielerlevel, XP pauschal
+
+1. `LVL 20`, `pech=0` (siehe A14). Zehnmal `BATTLE 25` → das Gegnerlevel in der
+   ersten Zeile liegt **immer** zwischen 18 und 20, nie bei 21 oder 22.
+2. `LVL 1` → `BATTLE 25` kämpft immer auf Level 1.
+3. Statuskarte Seite 4: XP-Balken notieren, einen freien Kampf gewinnen → der
+   Balken wächst um rund ein Achtel, egal welches Level der Gegner hatte.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft

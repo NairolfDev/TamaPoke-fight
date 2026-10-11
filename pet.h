@@ -241,10 +241,11 @@ public:
   // der naechste Sieg selbst der Aufstieg.
   uint16_t xpGainFor(uint8_t foeLevel) const {
     if (levelPending() || level() >= LEVEL_CAP) return 0;
-    int pct = 12 + 4 * ((int)foeLevel - (int)level());
-    if (pct < 5) pct = 5;
-    if (pct > 25) pct = 25;
-    return (uint16_t)((uint32_t)lvlReq() * pct / 100);
+    // 4.3 (entspannt): pauschal 12 % pro Sieg, rund acht Kaempfe pro Level.
+    // Haengt nicht mehr am Gegnerlevel - sonst wuerden die schwaecheren
+    // Gegner und die Mitleidsregel das Leveln verlangsamen.
+    (void)foeLevel;
+    return (uint16_t)((uint32_t)lvlReq() * 12 / 100);
   }
   bool isRegistered(int16_t dex) const {
     return dex >= 1 && dex <= 151 && (dexReg[(dex - 1) >> 3] & (1 << ((dex - 1) & 7)));

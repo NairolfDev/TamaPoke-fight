@@ -524,15 +524,9 @@ def run_battle(player, foe, rng, player_ai=AI_ELITE, foe_ai=AI_WILD,
 # 6.3: Legendaere sind als Gegner ausgeschlossen.
 WILD_POOL = [n for n in sorted(BASE_STATS) if n not in LEGENDARY]
 
-# 6.3: Gegnerlevel ist Spielerlevel +/- spread. Nahe am Boden *schrumpft* die
-# Spanne, statt unten abgeschnitten zu werden:
-#
-#     spread = min(FOE_LEVEL_SPREAD, spielerLevel - 1)
-#
-# Eine abgeschnittene Spanne bleibt oben stehen und verschiebt das mittlere
-# Gegnerlevel nach oben - genau das machte das fruehe Spiel unnoetig hart.
-# Eine schrumpfende Spanne bleibt auf jedem Level symmetrisch um das
-# Spielerlevel. Harte Untergrenze ist 1.
+# 6.3 (entspannt): Gegnerlevel liegt zwischen Spielerlevel - spread und dem
+# Spielerlevel, nie darueber. Nahe am Boden schrumpft die Spanne, harte
+# Untergrenze ist 1.
 FOE_LEVEL_SPREAD = 2
 
 
@@ -540,7 +534,7 @@ def foe_level_range(player_level, spread=FOE_LEVEL_SPREAD):
     """Untere und obere Grenze des Gegnerlevels nach 6.3."""
     reach = max(0, min(spread, player_level - 1))
     # durch reach <= spielerLevel - 1 liegt low nie unter 1
-    return max(1, player_level - reach), player_level + reach
+    return max(1, player_level - reach), player_level
 
 
 def pick_foe_level(player_level, rng, spread=FOE_LEVEL_SPREAD):
@@ -764,26 +758,23 @@ def self_test():
         assert moves_for_level(dex, 100), 'Spezies ohne Attacke: %d' % dex
         assert len(moves_for_level(dex, 100)) <= MOVE_SLOTS
 
-    # Gegnerlevel nach 6.3: die Spanne schrumpft nahe am Boden.
+    # Gegnerlevel nach 6.3 (entspannt): nie ueber dem Spielerlevel, bis zu
+    # spread darunter, nie unter 1.
     assert foe_level_range(1) == (1, 1), 'Lv1 kaempft gleichstufig'
-    assert foe_level_range(2) == (1, 3)
-    assert foe_level_range(3) == (1, 5)
-    assert foe_level_range(4) == (2, 6), 'ab Lv4 volle Spanne'
-    assert foe_level_range(5) == (3, 7)
-    assert foe_level_range(25) == (23, 27)
-    # Kern der Regel: auf jedem Level symmetrisch um das Spielerlevel, und
-    # nie unter 1. Genau das leistete die alte Untergrenze 2 nicht.
-    for lv in range(1, 60):
+    assert foe_level_range(2) == (1, 2)
+    assert foe_level_range(3) == (1, 3)
+    assert foe_level_range(4) == (2, 4)
+    assert foe_level_range(25) == (23, 25)
+    for lv in range(1, 101):
         low, high = foe_level_range(lv)
-        assert lv - low == high - lv, 'unsymmetrisch auf Level %d' % lv
+        assert high == lv, 'Gegner ueber Spielerlevel auf Level %d' % lv
         assert low >= 1, 'Untergrenze 1 verletzt auf Level %d' % lv
-    # spread 0 heisst gleichstufig
+    # spread 0 heisst gleichstufig - darauf steht die BSIM-Referenz
     assert foe_level_range(1, 0) == (1, 1)
     assert foe_level_range(25, 0) == (25, 25)
-    # gezogene Level bleiben in der Spanne und schoepfen sie aus
     rng = random.Random(11)
     assert {pick_foe_level(1, rng) for _ in range(200)} == {1}
-    assert {pick_foe_level(2, rng) for _ in range(400)} == {1, 2, 3}
+    assert {pick_foe_level(2, rng) for _ in range(400)} == {1, 2}
     for lv in (3, 10, 50):
         low, high = foe_level_range(lv)
         rng = random.Random(lv)

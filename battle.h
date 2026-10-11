@@ -93,7 +93,7 @@ void fighterFromDex(Fighter &f, uint16_t dex, uint8_t level, bool shiny);
 // (endKind CER_RUNAWAY) bekommen +10 % ATK - der Groll.
 void fighterFromRival(Fighter &f, const Rival &r, uint8_t level);
 
-// 6.3: Gegnerlevel Spielerlevel +/- spread, Spanne schrumpft am Boden.
+// 6.3 (entspannt): Gegnerlevel Spielerlevel - spread bis Spielerlevel.
 void foeLevelRange(uint8_t playerLevel, uint8_t spread, uint8_t *low,
                    uint8_t *high);
 uint8_t pickFoeLevel(uint8_t playerLevel, uint8_t spread);
