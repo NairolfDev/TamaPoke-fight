@@ -66,5 +66,10 @@ if ($target -and $target.TrimEnd('\') -ne $repo.TrimEnd('\')) {
 }
 
 $FQBN = "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
+# "Stop" gilt nur fuer die Pruefungen oben. Leitet der Aufrufer mit 2>&1 um,
+# macht Windows PowerShell 5.1 aus jeder stderr-Zeile von arduino-cli einen
+# NativeCommandError - und "Stop" brach dann schon an der harmlosen
+# Deprecation-Warnung von SensorLib ab. Ob der Build klappt, sagt $LASTEXITCODE.
+$ErrorActionPreference = "Continue"
 arduino-cli compile --fqbn $FQBN --build-path (Join-Path $repo $BuildPath) $sketch
 exit $LASTEXITCODE
