@@ -306,7 +306,7 @@ void Pet::addBond(uint8_t amt) {
   bondToday += amt;
 }
 
-void Pet::checkMedals(bool shinyWin) {
+void Pet::checkMedals(uint16_t extra) {
   if (isEgg()) return;
   uint16_t before = medals;
   if (level() >= 10) medals |= MED_LV10;
@@ -320,7 +320,7 @@ void Pet::checkMedals(bool shinyWin) {
   // 6.7: haengt an battlesWon, nicht am Aufruf - ein Geraet, das schon
   // gewonnene Kaempfe mitbringt, bekommt die Medaille nachtraeglich.
   if (battlesWon >= 1) medals |= MED_FIRSTWIN;
-  if (shinyWin) medals |= MED_SHINYWIN;
+  medals |= extra;
   uint16_t gained = medals & ~before;
   if (gained) {
     for (uint16_t m = gained; m; m &= (m - 1)) totalMedals++;
@@ -436,6 +436,31 @@ void Pet::setRival(uint16_t dex, uint8_t endKind) {
   memset(rival.moves, 0, sizeof(rival.moves));
   rival.set = true;
   rivalDay = 0;
+  save();
+}
+
+// Trainingspunkte einzeln auslosen: aus einem Sieg wird einer, aus einem
+// Arenarang mehrere, und jeder landet unabhaengig auf ATK, DEF oder SPD.
+void Pet::trainRandom(uint8_t n) {
+  while (n--) {
+    uint8_t *stat = nullptr;
+    switch (random(3)) {
+      case 0: stat = &trAtk; break;
+      case 1: stat = &trDef; break;
+      default: stat = &trSpe; break;
+    }
+    if (*stat < 100) (*stat)++;
+  }
+}
+
+// 7: Belohnung nach der Tabelle - Rang 1-2 +2, 3-5 +3, 6-8 +5 Trainings-
+// punkte, Rang 8 dazu MED_ARENA. Die "bessere Ei-Chance" aus Rang 3-5 ist
+// in der Spec nicht beziffert und deshalb nicht gebaut.
+void Pet::arenaWin(uint8_t rank) {
+  if (rank != arenaRank + 1 || rank > 8) return;
+  arenaRank = rank;
+  trainRandom(rank <= 2 ? 2 : rank <= 5 ? 3 : 5);
+  checkMedals(rank == 8 ? MED_ARENA : 0);
   save();
 }
 
@@ -557,18 +582,12 @@ void Pet::battleWin(bool foeShiny) {
   addBond(1);
   battlesWon++;
   lossStreak = 0;
-  uint8_t *stat = nullptr;
-  switch (random(3)) {
-    case 0: stat = &trAtk; break;
-    case 1: stat = &trDef; break;
-    default: stat = &trSpe; break;
-  }
-  if (*stat < 100) (*stat)++;
+  trainRandom(1);
   heartUntil = millis() + HEART_MS;
   registerCare();
   // MED_FIRSTWIN und MED_SHINYWIN haengen am Sieg, also hier pruefen -
   // checkMedals() feiert sie dann mit der vorhandenen Medaillen-Animation.
-  checkMedals(foeShiny);
+  checkMedals(foeShiny ? MED_SHINYWIN : 0);
   save();
 }
 
@@ -815,6 +834,7 @@ void Pet::save() {
   // gilt der Startwert - ein altes oder kaputtes Blob wird so nie gelesen.
   prefs.putBytes("rival", &rival, sizeof(rival));
   prefs.putUInt("rivday", rivalDay);
+  prefs.putUChar("arena", arenaRank);
   prefs.putUChar("nvs", nvsVer);
 }
 
@@ -880,6 +900,7 @@ void Pet::load() {
   if (prefs.getBytesLength("rival") == sizeof(rival))
     prefs.getBytes("rival", &rival, sizeof(rival));
   rivalDay = prefs.getUInt("rivday", 0);
+  arenaRank = prefs.getUChar("arena", 0);
   nvsVer = prefs.getUChar("nvs", 1);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);

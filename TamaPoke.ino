@@ -389,6 +389,42 @@ static void simPlayer(Fighter &f, uint16_t dex, uint8_t level) {
 // BATTLE <dex>: ein Kampf des echten Pets gegen die Spezies, Runde fuer Runde
 // mitgeschrieben. Wendet noch KEINE Kosten und Belohnungen aus 6.7 an - das
 // gehoert in die UI-Phase.
+// 7: Rang und naechster Gegner, dazu der naechste Rang einmal headless.
+// Kaempft mit einer Kopie des Spielers - Pet, AP und Rang bleiben, wie sie
+// sind. Die HP-Zeile zeigt, dass nichts zwischen den Kaempfen heilt.
+void arenaCmd() {
+  Serial.printf("arenarang %u/8\n", pet.arenaRank);
+  if (pet.arenaRank >= ARENA_RANKS || pet.isEgg()) {
+    Serial.println("DONE");
+    return;
+  }
+  uint8_t rank = pet.arenaRank + 1;
+  Fighter pl;
+  fighterFromPet(pl, pet);
+  Serial.printf("rang %u, ki %s:", rank,
+                arenaFoeAi(rank) == AI_ARENA ? "arena" : "elite");
+  for (uint8_t i = 0; i < 3; i++) {
+    Fighter fo;
+    arenaFoe(fo, rank, i, pl.level, pet.rival);
+    Serial.printf(" %s%s Lv%u", ARENA_TEAMS[rank - 1][i] ? "" : "RIVALE ",
+                  DEX_TBL[fo.dex].name, fo.level);
+  }
+  Serial.println();
+  for (uint8_t i = 0; i < 3; i++) {
+    Fighter fo;
+    arenaFoe(fo, rank, i, pl.level, pet.rival);
+    if (i) arenaNextFight(pl, pet.berryKnown);
+    uint8_t ai = ARENA_TEAMS[rank - 1][i] ? arenaFoeAi(rank) : AI_ELITE;
+    uint8_t rounds = 0;
+    uint8_t res = battleRun(pl, fo, AI_ELITE, ai, &rounds);
+    Serial.printf("kampf %u: %s nach %u runden, hp %u/%u\n", i + 1,
+                  res == BR_WIN ? "WIN" : res == BR_LOSS ? "LOSS" : "DRAW",
+                  rounds, pl.hp, pl.maxHp);
+    if (res != BR_WIN) break;
+  }
+  Serial.println("DONE");
+}
+
 // 5.5: zeigt den Rivalenslot und seine Kampfwerte auf Spielerlevel + 2.
 // Veraendert nichts - der Kampf selbst laeuft ueber die Engine wie jeder
 // andere, gemessen wird er im Simulator (battle_sim.py --rival).
@@ -646,6 +682,11 @@ void handleSerial() {
     else
       Serial.println("gegner wieder zufaellig");
     Serial.println("DONE");
+  } else if (line == "ARENA") {
+    arenaCmd();
+  } else if (line.startsWith("ARENA ")) {
+    pet.setArenaRank((uint8_t)line.substring(6).toInt());  // Testhilfe
+    arenaCmd();
   } else if (line == "RIVAL") {
     rivalCmd();
   } else if (line.startsWith("RIVAL ")) {
@@ -1945,21 +1986,19 @@ void renderCardMedals() {
   gfx->setCursor(CX - strlen(head) * 9, 48);
   gfx->print(head);
 
-  // 6.7: zehn Medaillen, also zwei Spalten mal fuenf Reihen. Kachel 180x40
-  // bei x 48/238, y 100 + Reihe*54 - die letzte Reihe endet bei 356 und
-  // bleibt damit ueber der Seitenanzeige (374). Nachgerechnet gegen Radius
-  // 231 um (233,233): engste Stelle ist die obere Ecke der ersten Reihe mit
-  // 3,9 px Luft. Das alte Raster (x 28, Kachel 196 breit) ragte dort um
-  // 13 px hinaus.
+  // Elf Medaillen, also zwei Spalten mal sechs Reihen. Kachel 180x32 bei
+  // x 48/238, y 100 + Reihe*40 - die letzte Reihe endet bei 332, die
+  // Seitenanzeige sitzt bei 374. Gegen Radius 231 um (233,233): engste
+  // Stelle ist die obere Ecke der ersten Reihe, 227,9 px vom Mittelpunkt.
   for (int i = 0; i < MED_COUNT; i++) {
-    int x = 48 + (i % 2) * 190, y = 100 + (i / 2) * 54;
+    int x = 48 + (i % 2) * 190, y = 100 + (i / 2) * 40;
     bool g = pet.hasMedal(1 << i);
-    gfx->fillRoundRect(x, y, 180, 40, 10, g ? UI_BAR_OK : UI_TRACK);
+    gfx->fillRoundRect(x, y, 180, 32, 10, g ? UI_BAR_OK : UI_TRACK);
     if (g) {  // marca de conseguida
-      gfx->fillCircle(x + 20, y + 20, 11, UI_BG_DAY);
+      gfx->fillCircle(x + 20, y + 16, 11, UI_BG_DAY);
       gfx->setTextColor(UI_BAR_OK);
       gfx->setTextSize(2);
-      gfx->setCursor(x + 14, y + 12);
+      gfx->setCursor(x + 14, y + 8);
       gfx->print("v");
     }
     // Label so gross wie es passt - dasselbe Verfahren wie bei den
@@ -1971,7 +2010,7 @@ void renderCardMedals() {
     uint8_t ts = ((int)strlen(dsc) * 12 <= avail) ? 2 : 1;
     gfx->setTextColor(g ? UI_BG_DAY : 0x8410);
     gfx->setTextSize(ts);
-    gfx->setCursor(x + 40, y + 20 - 4 * ts);
+    gfx->setCursor(x + 40, y + 16 - 4 * ts);
     gfx->print(dsc);
   }
 }
@@ -2040,7 +2079,15 @@ void renderCardProgress() {
   gfx->setCursor(CX - strlen(evo) * 6, 256);
   gfx->print(evo);
 
-  // descuidos (retrasan la evolucion)
+  // 7: Arenarang, gehoert dem Spieler. Groesster Eckabstand der Zeile bei
+  // 13 Zeichen (155,300): 102 px.
+  char ar[20];
+  snprintf(ar, sizeof(ar), T(S_ARENA_FMT), pet.arenaRank);
+  gfx->setTextColor(pet.arenaRank ? UI_INK : UI_TRACK);
+  gfx->setCursor(CX - strlen(ar) * 6, 284);
+  gfx->print(ar);
+
+  // Versaeumnisse (verzoegern die Entwicklung)
   char ms[24];
   snprintf(ms, sizeof(ms), T(S_MISTAKES_FMT), pet.careMistakes);
   gfx->setTextColor(pet.careMistakes > 0 ? UI_BAR_BAD : UI_INK);

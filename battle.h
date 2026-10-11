@@ -129,6 +129,27 @@ int8_t battleChooseMove(const Fighter &user, const Fighter &foe, uint8_t ai);
 uint8_t battleRound(Fighter &pl, Fighter &fo, int8_t plSlot, uint8_t foeAi,
                     BattleEvent ev[BATTLE_MAX_EVENTS], uint8_t *evCount);
 
+// --- Arena (7) ------------------------------------------------------------
+
+#define ARENA_RANKS 8
+// Drei Pokemon je Rang, Typthema in der Reihenfolge der Gen-1-Arenen.
+// 0 = der Rivale (Raenge 3, 6, 8).
+extern const uint16_t ARENA_TEAMS[ARENA_RANKS][3];
+
+// rank ist 1-8. Gegnerlevel nach der Tabelle in 7, KI nach 6.6.
+uint8_t arenaFoeLevel(uint8_t rank, uint8_t playerLevel);
+uint8_t arenaFoeAi(uint8_t rank);
+// Gegner idx (0-2) des Rangs. Der Rivale behaelt sein Level aus 5.5.
+void arenaFoe(Fighter &f, uint8_t rank, uint8_t idx, uint8_t playerLevel,
+              const Rival &r);
+// Zwischen zwei Arenakaempfen: HP und AP bleiben, Status, Stufen, Beere und
+// K.-o.-Rettung gelten pro Kampf und werden frisch.
+void arenaNextFight(Fighter &pl, bool berryKnown);
+// Ein ganzer Rang ohne UI: BR_WIN nur, wenn alle drei fallen. fought zaehlt
+// die angetretenen Kaempfe und darf 0 sein.
+uint8_t arenaRun(Fighter &pl, uint8_t rank, const Rival &r, bool berryKnown,
+                 uint8_t plAi, uint8_t *fought);
+
 // Ganzer Kampf ohne UI, fuer BSIM. rounds darf 0 sein.
 uint8_t battleRun(Fighter &pl, Fighter &fo, uint8_t plAi, uint8_t foeAi,
                   uint8_t *rounds);

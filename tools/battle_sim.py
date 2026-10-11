@@ -585,6 +585,67 @@ def pick_rival(player_level, rng, rival_dex, grudge):
     return make_rival(rng.choice(WILD_POOL), lv, genes, grudge)
 
 
+# --------------------------------------------------------------------------
+# Arena (7)
+# --------------------------------------------------------------------------
+
+# Wie ARENA_TEAMS in battle.cpp: Gestein, Wasser, Elektro, Pflanze, Gift,
+# Psycho, Feuer, Boden. 0 = der Rivale.
+ARENA_TEAMS = [(74, 111, 95), (120, 118, 121), (100, 25, 0), (114, 70, 45),
+               (109, 89, 110), (64, 122, 0), (58, 78, 59), (51, 34, 0)]
+ARENA_THEMES = ['rock', 'water', 'electric', 'grass', 'poison', 'psychic',
+                'fire', 'ground']
+
+
+def arena_foe_level(rank, player_level):
+    return min(player_level + (1 if rank <= 2 else 2 if rank <= 5 else 3), 100)
+
+
+def arena_ai(rank):
+    return AI_ARENA if rank <= 4 else AI_ELITE
+
+
+def arena_next_fight(c, berry_known):
+    """Wie arenaNextFight(): HP und AP bleiben, der Rest gilt pro Kampf."""
+    c.status = ST_NONE
+    c.atk_stage = c.def_stage = 0
+    c.berry_left = 1 if berry_known else 0
+    c.endure_left = 1
+
+
+def run_arena(player, rank, rng, rival, berry_known=False,
+              player_ai=AI_ELITE):
+    """Ein ganzer Rang. ('win', 3) nur, wenn alle drei fallen, sonst
+    ('loss', Nummer des verlorenen Kampfs). rival ist ein fertiger Gegner -
+    er kaempft nach 5.5 auf Spielerlevel + 2, nicht nach der Rangtabelle."""
+    for i, dex in enumerate(ARENA_TEAMS[rank - 1]):
+        if dex:
+            foe, ai = make_foe(dex, arena_foe_level(rank, player.level)), arena_ai(rank)
+        else:
+            foe, ai = rival, AI_ELITE
+        if i:
+            arena_next_fight(player, berry_known)
+        result, _ = run_battle(player, foe, rng, player_ai, ai)
+        if result != 'win':
+            return 'loss', i + 1
+    return 'win', 3
+
+
+def simulate_arena(n, level, rank, rng, rival_dex=4, grudge=False,
+                   berry=False, bond=0, player_dex=None):
+    """n Laeufe eines Rangs. Liefert (geschafft, Summe der erreichten
+    Kaempfe)."""
+    wins = reached = 0
+    for _ in range(n):
+        player = make_player(player_dex or rng.choice(WILD_POOL), level, rng,
+                             bond, 100, berry)
+        rival = pick_rival(level, rng, rival_dex, grudge)
+        res, k = run_arena(player, rank, rng, rival, berry)
+        wins += res == 'win'
+        reached += k
+    return wins, reached
+
+
 def simulate(n, level, rng, bond=0, energy=100, berry=False,
              player_ai=AI_ELITE, foe_ai=AI_WILD, player_dex=None,
              foe_dex=None, spread=0, rival_dex=None, grudge=False):
@@ -754,6 +815,27 @@ def self_test():
     assert pick_rival(10, rng, 4, False).dex == 4
     assert pick_rival(10, rng, 0, False).level == 12
 
+    # 7: Arena. Teams typtreu und ohne Legendaere, Level nach Tabelle,
+    # keine Zwischenheilung.
+    for rank, (team, theme) in enumerate(zip(ARENA_TEAMS, ARENA_THEMES), 1):
+        for dex in team:
+            if dex:
+                assert TYPE_ID[theme] in species_types(dex), (rank, dex)
+                assert dex not in LEGENDARY
+        assert (0 in team) == (rank in (3, 6, 8)), 'Rivale in 3/6/8'
+    assert arena_foe_level(1, 20) == 21 and arena_foe_level(3, 20) == 22
+    assert arena_foe_level(8, 20) == 23 and arena_foe_level(8, 99) == 100
+    assert arena_ai(4) == AI_ARENA and arena_ai(5) == AI_ELITE
+    hurt = make_player(1, 25, random.Random(1), berry=True)
+    hurt.hp, hurt.berry_left, hurt.endure_left, hurt.atk_stage = 7, 0, 0, 2
+    arena_next_fight(hurt, True)
+    assert hurt.hp == 7, 'Arena heilt nicht zwischen den Kaempfen'
+    assert hurt.berry_left == 1 and hurt.endure_left == 1
+    assert hurt.atk_stage == 0
+    rng = random.Random(4)
+    res, k = run_arena(make_player(6, 30, rng), 1, rng, make_rival(4, 32))
+    assert (res, k) == ('win', 3) or (res == 'loss' and 1 <= k <= 3)
+
     # Ein Kampf laeuft durch und endet mit gueltigem Ergebnis
     rng = random.Random(7)
     res, rnds = run_battle(make_player(1, 25, rng), make_foe(4, 25), rng)
@@ -810,6 +892,10 @@ def main(argv=None):
                          'frueheres Pokemon. Level Spieler+2, Elite-KI')
     ap.add_argument('--grudge', action='store_true',
                     help='Rivale ist weggelaufen: +10 %% ATK')
+    ap.add_argument('--arena', type=int, default=None, metavar='RANG',
+                    help='Arenarang 1-8 (7): drei Kaempfe ohne Zwischen'
+                         'heilung. Der Rivale in 3/6/8 kommt aus --rival '
+                         '(Vorgabe 4 = Glumanda)')
     ap.add_argument('--verbose', action='store_true',
                     help='einen einzelnen Kampf mitschreiben')
     ap.add_argument('--self-test', action='store_true')
@@ -835,6 +921,21 @@ def main(argv=None):
                  fdex, foe.level, foe.max_hp))
         print('\n'.join(log))
         print('Ergebnis: %s nach %d Runden' % (result, rnds))
+        return 0
+
+    if args.arena is not None:
+        rival_dex = 4 if args.rival is None else args.rival
+        wins, reached = simulate_arena(args.n, args.level, args.arena, rng,
+                                       rival_dex, args.grudge, args.berry,
+                                       args.bond, args.player_dex)
+        print('%d Laeufe, Rang %d (%s), Spielerlevel %d, Gegner Lv %d%s'
+              % (args.n, args.arena, ARENA_THEMES[args.arena - 1], args.level,
+                 arena_foe_level(args.arena, args.level),
+                 ', Rivale Dex %d' % rival_dex
+                 if 0 in ARENA_TEAMS[args.arena - 1] else ''))
+        print('Siege       %5d   %s' % (wins, _fmt(wins, args.n)))
+        avg10 = reached * 10 // args.n
+        print('Kaempfe     %5d.%d im Schnitt erreicht' % (avg10 // 10, avg10 % 10))
         return 0
 
     tally, rounds_total, timeouts = simulate(

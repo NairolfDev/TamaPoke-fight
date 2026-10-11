@@ -262,6 +262,36 @@ noch keinen Einstieg in der UI — siehe B6, die Prüfschritte kommen dort dazu.
    liegt er am Rand.
 7. Alle sechs Sprachen: `BAYA BERRY BAIE BEERE BACCA BAGA`, mittig.
 
+## A13. Arena: Rang, Konsole, Medaille
+
+Phase 7 (§7), noch ohne eigenes Icon. Der Rang liegt unter dem NVS-Schlüssel
+`arena` und gehört dem Spieler.
+
+1. `ARENA` → `arenarang 0/8`, darunter Rang 1 mit KI `arena` und drei
+   Gegnern `Kleinstein Rihorn Onix` auf Spielerlevel + 1, dann ein headless
+   gespielter Lauf: `kampf 1 … hp x/y`, `kampf 2 …`. **Die HP am Ende von
+   Kampf 1 sind die HP am Anfang von Kampf 2** — sinkt der Wert nur, nie
+   zurück auf voll, heilt die Arena korrekt nicht. `STATS` danach: nichts
+   hat sich verändert (der Lauf kämpft mit einer Kopie).
+2. `ARENA 2` → Rang 3 wird gezeigt: `Voltobal Pikachu RIVALE <Name>`, der
+   Rivale auf Spielerlevel + 2, die beiden anderen auf + 2.
+3. `ARENA 5` → `ki elite`, `ARENA 7` → Rang 8: Gegner auf + 3, Rivale auf + 2.
+4. Statuskarte Seite 4 (Fortschritt): Zeile `ARENA 7/8` bei y 284 zwischen
+   Evolutionszeile und Versäumnissen, nichts überlappt. Bei Rang 0 grau.
+5. Neustart → der Rang ist noch da.
+6. **Generationswechsel:** `BYE`, Zeremonie, schlüpfen lassen → der Rang ist
+   **noch da**, er gehört dem Spieler.
+7. `ARENA 0` zurücksetzen.
+
+**Medaillenseite mit elf Medaillen.** Das Raster ist wieder neu: zwei Spalten
+mal **sechs** Reihen, Kachel 180×32, y 100 + Reihe·40, letzte Reihe endet bei
+332. Engste Stelle die obere Ecke der ersten Reihe, 227,9 px vom Mittelpunkt —
+dort hinsehen. Die elfte Medaille (`ARENA RANG 8`) steht allein links unten.
+Der Kopf zeigt `%u/11`. Prüfschritte aus A9 gelten weiter.
+
+`MED_ARENA` selbst gibt es erst, wenn Rang 8 im echten Lauf geschafft wird —
+das braucht den Einstieg aus D6.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft

@@ -54,8 +54,9 @@ enum : uint16_t {
   // Altdaten eine andere Medaille anzeigen als vergeben wurde - und es
   // gibt keinen Weg, das nachtraeglich zu unterscheiden.
   MED_FIRSTWIN = 1 << 8, MED_SHINYWIN = 1 << 9,
+  MED_ARENA = 1 << 10,  // 7: Rang 8 geschafft
 };
-#define MED_COUNT 10
+#define MED_COUNT 11
 
 class Pet {
 public:
@@ -107,6 +108,9 @@ public:
   // 5.5: Tag des letzten Rivalenkampfs, als today()+1 gespeichert. So heisst
   // 0 "nie" - auch ohne Uhr, wo today() selbst 0 ist.
   uint32_t rivalDay = 0;
+  // 7: hoechster geschaffter Arenarang, 0-8. Gehoert dem Spieler, nicht dem
+  // Individuum - hatch() fasst ihn deshalb nicht an.
+  uint8_t arenaRank = 0;
   uint8_t nvsVer = NVS_VER;  // Schemaversion, siehe migrate() in pet.cpp
 
   // 4.2: xpMinutes zaehlt pro Spielminute um 1 hoch und STOPPT bei
@@ -125,6 +129,9 @@ public:
   bool rivalReady() const { return rivalDay != today() + 1; }
   void markRivalFought();
   void setRival(uint16_t dex, uint8_t endKind);  // Konsole: RIVAL <dex>
+  // 7: Rang rank geschafft (alle drei Kaempfe). Nur der naechste Rang zaehlt.
+  void arenaWin(uint8_t rank);
+  void setArenaRank(uint8_t r) { arenaRank = r > 8 ? 8 : r; save(); }  // Konsole
   uint8_t rivalLevel() const {  // 5.5: immer Spielerlevel + 2
     uint16_t l = level() + 2;
     return l > LEVEL_CAP ? LEVEL_CAP : (uint8_t)l;
@@ -297,7 +304,11 @@ private:
   uint32_t today() const { return lastSeenEpoch ? lastSeenEpoch / 86400 : 0; }
   void registerCare();   // primer cuidado del dia: racha + vinculo
   void addBond(uint8_t amt);
-  void checkMedals(bool shinyWin = false);
+  // extra: Medaillen, die an einem Ereignis haengen statt an einem Zustand
+  // (MED_SHINYWIN, MED_ARENA). Sie laufen trotzdem hier durch, damit die
+  // Feier und totalMedals sie mitzaehlen.
+  void checkMedals(uint16_t extra = 0);
+  void trainRandom(uint8_t n);  // n Trainingspunkte zufaellig auf ATK/DEF/SPD
   void snapshotRival(uint8_t endKind);  // 5.5: bei allen drei Enden
   void tick();
   void hatch();
