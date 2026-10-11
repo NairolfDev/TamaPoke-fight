@@ -121,11 +121,20 @@ Datei ist in Wahrheit da. Lange Aufrufe auf mehrere kurze Zeilen verteilen
 (Variablen setzen, dann aufrufen) — oder den Befehl selbst ausführen, statt ihn
 zum Kopieren zu geben.
 
-Port ist `COM3`, nicht `/dev/ttyACM0`:
+Port ist `COM3`, nicht `/dev/ttyACM0`. Geflasht wird mit `flash.bat` im
+Repo-Ordner — sie fragt nach dem Port (`COM3` oder nur `3`), zeigt den Hash
+des Abbilds, warnt bei `-dirty` und schreibt das 16-MB-Vollabbild
+`build\battle\TamaPoke.ino.merged.bin` mit `esptool` an `0x0`:
 
 ```
-arduino-cli upload -p COM3 -b "$FQBN" --input-dir build\baseline
+flash.bat
+flash.bat COM3
 ```
+
+**Nie `arduino-cli upload --input-dir` ohne Sketch-Pfad.** Das hat einmal gar
+nichts geschrieben, und eine Stunde lang wurde die Werksdemo debuggt.
+`flash.bat` sucht `esptool.exe` unter `%LOCALAPPDATA%\Arduino15\packages\esp32\
+tools\esptool_py\<version>\` — der Versionsordner ändert sich mit Core-Updates.
 
 **Es kann immer nur ein Programm den COM-Port halten.** Erst flashen, Serial-
 Monitor schließen, dann Sprites schicken.

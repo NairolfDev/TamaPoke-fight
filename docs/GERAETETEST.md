@@ -26,6 +26,10 @@ und trimmt; ohne LF passiert nichts.
 NVS steht, ist beim nächsten Verbinden weg. Zusammengehörige Befehle gehören
 deshalb in **eine** Sitzung — nicht Port auf, ein Befehl, Port zu.
 
+**Flashen:** committen, `tools\build.ps1`, dann `flash.bat` im Repo-Ordner
+und den Port eingeben. Die Datei zeigt den Hash, der gleich auf dem Gerät
+steht — mit `-dirty` ist der Stand nicht reproduzierbar, sie fragt dann nach.
+
 **Nur ein Programm darf COM3 halten.** Erst flashen, dann Monitor schließen,
 dann Sprites schicken (`python3 tools/send_sd.py --port COM3`).
 
