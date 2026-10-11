@@ -697,6 +697,75 @@ def _fmt(part, whole):
 # Selbsttest
 # --------------------------------------------------------------------------
 
+def _tries_until_win(make, rng, cap=30):
+    """make(streak) -> (player, foe, ai), neu gewuerfelt pro Versuch."""
+    for streak in range(cap):
+        player, foe, ai = make(streak)
+        if run_battle(player, foe, rng, AI_ELITE, ai)[0] == 'win':
+            return streak + 1
+    return cap
+
+
+def _summary(xs):
+    xs = sorted(xs)
+    return sum(xs) / len(xs), xs[int(0.9 * len(xs))], xs[-1]
+
+
+def chill_report(n=2000, seed=1):
+    """Ist das Spiel entspannt? Prueft die Ziele aus dem Plan
+    docs/superpowers/plans/2026-10-11-entspannter-kampf.md."""
+    rng = random.Random(seed)
+    ok = True
+
+    def check(name, value, limit, fmt='%.2f'):
+        nonlocal ok
+        good = value <= limit
+        ok = ok and good
+        print('  %-44s ' % name + fmt % value + '   Ziel <= ' + fmt % limit
+              + ('   OK' if good else '   VERFEHLT'))
+
+    print('Levelkampf (Gegner neu pro Versuch, Mitleidsregel)')
+    for lv, energy in ((5, 100), (15, 100), (30, 100), (50, 100), (30, 10)):
+        xs = []
+        for _ in range(n):
+            pdex = rng.choice(WILD_POOL)
+            def make(streak, pdex=pdex):
+                foe_lv = pity_level(pick_foe_level(lv, rng, 2), streak)
+                return (make_player(pdex, lv, rng, energy=energy),
+                        make_foe(rng.choice(WILD_POOL), foe_lv), AI_WILD)
+            xs.append(_tries_until_win(make, rng))
+        avg, p90, worst = _summary(xs)
+        tag = 'Lv %d%s' % (lv, ', erschoepft' if energy < 20 else '')
+        check('%s: Versuche im Schnitt' % tag, avg, 3.0 if energy < 20 else 2.0)
+        if energy >= 20:
+            check('%s: 90 %% brauchen hoechstens' % tag, p90, 4, '%d')
+
+    print('Rivale Lv 30 (frueheres Pokemon, Arena-KI)')
+    xs = []
+    for _ in range(n):
+        pdex, rdex = rng.choice(WILD_POOL), rng.choice(WILD_POOL)
+        genes = tuple(90 + rng.randrange(21) for _ in range(3))
+        def make(streak, pdex=pdex, rdex=rdex, genes=genes):
+            return (make_player(pdex, 30, rng),
+                    make_rival(rdex, pity_level(rival_level(30), streak), genes),
+                    AI_ARENA)
+        xs.append(_tries_until_win(make, rng))
+    check('Rivale: Versuche im Schnitt', _summary(xs)[0], 3.0)
+
+    print('Arena Lv 30 (Kaempfe fuer den ganzen Rang, 3 = perfekt)')
+    for rank in range(1, 9):
+        xs = [arena_rank_fights(rng.choice(WILD_POOL), 30, rank, rng)
+              for _ in range(n // 4)]
+        avg, p90, worst = _summary(xs)
+        check('Rang %d (%s): Kaempfe im Schnitt' % (rank, ARENA_THEMES[rank - 1]),
+              avg, 7.0)
+        check('Rang %d: 90 %% brauchen hoechstens' % rank, p90, 12, '%d')
+
+    check('Typ-Sackgassen in der Arena', len(arena_dead_ends()), 0, '%d')
+    print('ENTSPANNT' if ok else '!!! mindestens ein Ziel verfehlt - melden')
+    return ok
+
+
 def self_test():
     """Kleinster Satz Pruefungen, der bei kaputter Logik fehlschlaegt."""
     # Typentabelle: Gen-1-Eigenheiten
@@ -914,11 +983,15 @@ def main(argv=None):
     ap.add_argument('--verbose', action='store_true',
                     help='einen einzelnen Kampf mitschreiben')
     ap.add_argument('--self-test', action='store_true')
+    ap.add_argument('--entspannt', action='store_true',
+                    help='Abnahmebericht: ist das Spiel entspannt?')
     args = ap.parse_args(argv)
 
     if args.self_test:
         self_test()
         return 0
+    if args.entspannt:
+        return 0 if chill_report() else 1
 
     rng = random.Random(args.seed)
 

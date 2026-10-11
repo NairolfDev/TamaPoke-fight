@@ -163,14 +163,15 @@ bool levelPending() const { return xpMinutes >= lvlReq(); }
 Ist **kein** Level offen, zahlt jeder gewonnene Kampf direkt auf `xpMinutes` ein:
 
 ```c
-pct    = 12 + 4 * (foeLevel - level());   // begrenzt auf 5..25
-xpGain = lvlReq() * pct / 100;
+xpGain = lvlReq() * 12 / 100;   // pauschal, unabhängig vom Gegnerlevel
 ```
 
-Bei gleichstarkem Gegner sind das 12 % — also rund **acht Kämpfe pro Level**.
-Stärkere Gegner zahlen mehr, schwächere weniger. Damit ist aktives Spielen
-etwa zwei- bis dreimal schneller als reines Warten, ohne das Warten wertlos
-zu machen.
+Das sind rund **acht Kämpfe pro Level**. Damit ist aktives Spielen etwa zwei-
+bis dreimal schneller als reines Warten, ohne das Warten wertlos zu machen.
+
+*Entspannt (2026-10-11):* früher `12 + 4 · (Gegnerlevel − Spielerlevel)` %.
+Seit wilde Gegner nie über dem Spieler stehen und die Mitleidsregel (§6.7)
+Gegner abschwächt, hätte das das Leveln verlangsamt — deshalb pauschal.
 
 Ist ein Level offen, gibt es keine XP mehr — der nächste Sieg *ist* der
 Levelaufstieg. Kein Moduswechsel in der UI nötig.
@@ -324,16 +325,25 @@ struct Rival {
   aktuellen Form mit seinen Genen, seinem Namen und seinem Shiny-Status.
 - **Weggelaufene Rivalen bekommen +10 % ATK.** Groll. Das Pokémon, das dich
   verlassen hat, kommt stärker zurück.
-- Der Rivale skaliert mit: sein Level ist immer `Spielerlevel + 2`.
+- Der Rivale kämpft auf **Spielerlevel**, mit der Arena-KI (§6.6, `RIVAL_AI`).
 
-Auftritte:
-- als **letzter Gegner** der Arenaränge 3, 6 und 8
-- einmal pro echtem Kalendertag als Option im freien Kampf, mit **doppelter XP**
-  (`rivalDay` verhindert das Farmen)
+Auftritt: einmal pro echtem Kalendertag als Option im freien Kampf, mit
+**doppelter XP**. `rivalDay` wird nur durch einen **Sieg** gesetzt — nach einer
+Niederlage darf man sofort nochmal.
+
+*Entspannt (2026-10-11):* früher Spielerlevel + 2, Elite-KI, Tag schon beim
+Kampfstart verbraucht, und der Rivale war dritter Gegner der Arenaränge 3, 6
+und 8. Dort konnte er eine Typ-Sackgasse sein (früheres Onix gegen neues
+Pikachu), deshalb ist er aus der Arena raus.
 
 ---
 
 ## 6. Kampf-Engine
+
+**Leitlinie (2026-10-11):** TamaPoke ist ein entspanntes Spiel. Kein Kampf darf
+zur Wand werden. Prüfstein ist `python3 tools/battle_sim.py --entspannt` — er
+misst Versuche bis zum Sieg und prüft feste Ziele (Plan
+`docs/superpowers/plans/2026-10-11-entspannter-kampf.md`).
 
 Getrennt in `battle.h` / `battle.cpp`. **Keine Rendering-Aufrufe in dieser
 Datei** — die Engine muss headless über die serielle Konsole laufen.
@@ -376,17 +386,20 @@ Zwei Filter, die beide auf bereits vorhandene Daten zugreifen:
 | Dämmerung | Gift, Boden, Gestein |
 | Nacht | Geist, Psycho, Eis |
 
-Legendäre sind ausgeschlossen. Das Gegnerlevel ist `Spielerlevel ± spread`, und
-die Spanne **schrumpft nahe am Boden, statt abgeschnitten zu werden**:
+Legendäre sind ausgeschlossen. Das Gegnerlevel liegt **nie über dem
+Spielerlevel** (entspannt, 2026-10-11):
 
 ```
-spread     = min(2, spielerLevel - 1)
-gegnerLevel = spielerLevel ± spread      // harte Untergrenze 1
+spread      = min(2, spielerLevel - 1)
+gegnerLevel = spielerLevel - 0..spread   // nie darüber, Untergrenze 1
 ```
 
 | Spielerlevel | 1 | 2 | 3 | 4 | 5 |
 |---|---|---|---|---|---|
-| Gegnerlevel | 1 | 1–3 | 1–5 | 2–6 | 3–7 |
+| Gegnerlevel | 1 | 1–2 | 1–3 | 2–4 | 3–5 |
+
+Davor galt `Spielerlevel ± spread`; die folgenden Absätze und die Messreihe
+beschreiben diese ältere, symmetrische Fassung.
 
 Ab Level 4 ist das dasselbe wie eine feste Spanne von ± 2; darunter ist es
 symmetrisch statt nach oben verschoben.
@@ -408,7 +421,8 @@ Der schwächere Gegner bleibt dabei erhalten, sobald es ihn überhaupt geben kan
 ab Level 2 nach unten, ab Level 4 in voller Breite. Er ist die Verschnaufpause
 zwischen zwei harten Kämpfen.
 
-Gemessen mit `--spread 2`, je 20 000 Kämpfe, Spieler gegen wilde KI:
+Gemessen vor dem 2026-10-11 mit `--spread 2` (symmetrisch), je 20 000
+Kämpfe, Spieler gegen wilde KI:
 
 | Level | 1 | 2 | 3 | 4 | 5 | 6 | 8 | 10 |
 |---|---|---|---|---|---|---|---|---|
@@ -468,9 +482,12 @@ Ausnahme: schlafende Pokémon und Eier kämpfen nicht.
 Drei Stufen, bewusst simpel:
 
 - **Wild:** zufällige Attacke mit AP > 0.
-- **Arena Rang 1–4:** zu 60 % die Attacke mit dem besten Typvorteil, sonst zufällig.
-- **Arena Rang 5–8 und Rivale:** immer die schadensstärkste Attacke; nutzt
-  Statusattacken, solange der Gegner über 70 % HP hat.
+- **Arena Rang 1–4:** wie wild.
+- **Arena Rang 5–8 und Rivale:** zu 60 % die Attacke mit dem besten
+  Typvorteil, sonst zufällig.
+- **Elite** (stärkste Attacke, Statusattacken über 70 % HP) bleibt nur das
+  Spielerverhalten im Simulator und in `BSIM`. Kein Gegner im Spiel nutzt sie
+  mehr (entspannt, 2026-10-11).
 
 ### 6.7 Ausgang
 
@@ -486,7 +503,10 @@ Drei Stufen, bewusst simpel:
 - **Kein Care-Slip-up.** Slip-ups verzögern die Entwicklung und kühlen die
   Bindung — Kämpfen darf nicht bestrafen, was Pflege belohnt.
 - Sofortiger erneuter Versuch erlaubt
-- `lossStreak++`. Ab 3: Gegnerlevel −1 je weiterer Niederlage, bis maximal −4.
+- `lossStreak++`. **Mitleidsregel:** jeder Gegner — wild, Rivale, Arena —
+  kommt auf `Level × (3/4)^lossStreak`, Untergrenze 1, **ohne Deckel**
+  (`pityLevel()`). Ein Sieg setzt zurück. Früher „ab 3: −1 je weiterer, max −4",
+  das wurde nie angewendet und hätte sehr schwache Spezies nicht gerettet.
   Niemand soll auf Stufe 7 festhängen, weil ihm ein Typ fehlt.
 
 **Kosten in jedem Fall**, unabhängig vom Ausgang: `−15 ENE`, `−8 FOOD`,
@@ -500,25 +520,46 @@ beim Aufwachen komplett auf.
 
 Endgame nach den freien Kämpfen. Erreichbar über ein neues Icon im unteren Bogen.
 
-Acht Ränge. Jeder Rang ist ein Trainer mit **drei** Pokémon eines Typthemas.
-Der Spieler kämpft ohne Zwischenheilung gegen alle drei — HP und AP bleiben
-zwischen den Kämpfen bestehen, das ist die eigentliche Schwierigkeit. Die
-Lieblingsbeere steht einmal **pro Kampf** zur Verfügung, nicht pro Rang.
+Acht Ränge, je drei Pokémon eines Typthemas. **Jeder Arenakampf ist ein
+gewöhnlicher Kampf** — volle HP, normale Kosten, normale XP, Beere, Flucht.
+Der Fortschritt wird **pro Gegner** gespeichert (`arenaStep`, 0–2): wer
+verliert, tritt einfach wieder gegen denselben Gegner an. Der dritte Sieg
+schließt den Rang ab. Kein Rivale in der Arena.
 
-In den Rängen 3, 6 und 8 ist der dritte Gegner der **Rivale**.
+| Rang | Thema | Team | Gegnerlevel | KI |
+|---|---|---|---|---|
+| 1 | Wasser | Sterndu, Goldini, Starmie | Spieler −2 | wild |
+| 2 | Elektro | Voltobal, Pikachu, Lektrobal | Spieler −2 | wild |
+| 3 | Pflanze | Tangela, Ultrigaria, Giflor | Spieler −1 | wild |
+| 4 | Gift | Smogon, Sleimok, Smogmog | Spieler −1 | wild |
+| 5 | Gestein | Amonitas, Kabuto, Kabutops | Spieler −1 | arena |
+| 6 | Psycho | Kadabra, Pantimos, Hypno | Spielerlevel | arena |
+| 7 | Kampf | Rasaff, Machomei, Kicklee | Spielerlevel | arena |
+| 8 | Feuer | Fukano, Gallopa, Arkani | Spielerlevel | arena |
 
-| Rang | Gegnerlevel | Belohnung |
-|---|---|---|
-| 1–2 | Spieler +1 | +2 Trainingspunkte |
-| 3–5 | Spieler +2 | +3 Trainingspunkte, bessere Ei-Chance |
-| 6–8 | Spieler +3 | +5 Trainingspunkte, Medaille |
+Sortiert nach gemessener Schwierigkeit. **Kein Gegner, gegen den eine Spezies
+gar keinen Schaden machen kann** — kein Boden (Pikachu wäre immun-gesperrt),
+kein Flug-Doppeltyp (Tragosso). `battle_sim.py --self-test` prüft das für alle
+151 Spezies auf Level 5–50. Die Mitleidsregel (§6.7) gilt auch hier.
 
-`arenaRank` persistiert über Generationswechsel hinweg — er gehört dem Spieler,
-nicht dem Pokémon, genau wie Streak und Rekorde.
+Belohnung: Rang 1–2 +2, Rang 3–5 +3, Rang 6–8 +5 Trainingspunkte, zufällig
+auf ATK/DEF/SPD verteilt. Rang 8 gibt `MED_ARENA`.
+
+`arenaRank` und `arenaStep` persistieren über Generationswechsel hinweg — sie
+gehören dem Spieler, nicht dem Pokémon, genau wie Streak und Rekorde.
 
 **Drei neue Medaillen** (`MED_COUNT` von 8 auf 11, die uint16-Bitmask hat Platz
-für 16): `MED_FIRSTWIN` (erster Sieg), `MED_ARENA` (Rang 8), `MED_SHINYWIN`
-(Shiny-Gegner besiegt).
+für 16): `MED_FIRSTWIN` (erster Sieg), `MED_SHINYWIN` (Shiny-Gegner besiegt),
+`MED_ARENA` (Rang 8).
+
+Gemessen mit `--entspannt`, Spieler Lv 30: ein ganzer Rang braucht im Schnitt
+3,95 (Wasser) bis 6,31 (Feuer) Kämpfe, 3 wären perfekt; 90 % schaffen jeden
+Rang in höchstens 12.
+
+*Entspannt (2026-10-11):* früher drei Siege am Stück ohne Zwischenheilung,
+Gegner Spieler +1 bis +3, Rivale in Rang 3/6/8, Boden-Teams in Rang 1 und 8.
+Rang 1 schaffte so jeder Fünfte, Rang 8 jeder Hundertste, und für Pikachu
+waren Rang 1 und 8 unmöglich. „Bessere Ei-Chance" (nie beziffert) gestrichen.
 
 ---
 
@@ -545,7 +586,7 @@ Runder Screen, 466×466, Mittelpunkt `CX 233`. Die Ecken sind abgeschnitten.
   Nebeneffekt passt zur Engine: sind alle AP leer, fällt sie auf Verzweifler
   zurück, und die Reihe kollabiert von selbst auf genau einen Button.
 - Beerenbutton in der Mitte, ausgegraut wenn unentdeckt oder verbraucht
-- Fluchtbutton nur bei freien Kämpfen, nicht in der Arena
+- Fluchtbutton in jedem Kampf. Flucht aus der Arena kostet wie jede Flucht, der Fortschritt bleibt
 - Beim Rivalen: sein gespeicherter Spitzname im Header statt des Speziesnamens
 
 **Animation** über die vorhandenen PMD-Aktionen: `Attack` (ID 6) beim Angriff,
