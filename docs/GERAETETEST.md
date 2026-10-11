@@ -242,6 +242,26 @@ Vorher `STATS` notieren (Spezies, Gene, Spitzname, Shiny).
 Der Kampf gegen den Rivalen selbst (einmal pro Kalendertag, doppelte XP) hat
 noch keinen Einstieg in der UI — siehe B6, die Prüfschritte kommen dort dazu.
 
+## A12. Beerenbutton im Kampf
+
+§6.5. Button `BEERE` mittig unter der Attackenreihe, 100×30 bei
+(183,388)–(283,418). Größter Eckabstand 191,6 px.
+
+1. Pokémon **ohne** entdeckte Lieblingsbeere (`STATS` → `baya=0`): Kampf
+   starten. Der Button ist **grau**, Antippen gibt nur den Ablehnungston und
+   kostet keine Runde.
+2. Lieblingsbeere entdecken (die richtige Farbe füttern, bis `baya=1`).
+3. Kampf starten: Button ist **grün**. Ein paar Runden kämpfen, dann antippen
+   → Ereignistext `BEERE`, Herzton, der eigene HP-Balken springt um die
+   Hälfte der maximalen HP nach oben (gedeckelt bei voll). Der Gegner greift
+   in derselben Runde trotzdem an — die Beere kostet die Aktion.
+4. Danach ist der Button **grau**. Zweites Antippen → Ablehnungston, nichts
+   passiert.
+5. Nächster Kampf: wieder grün. Einmal pro Kampf, nicht einmal pro Tag.
+6. Der Button überdeckt weder die Attackenbuttons (enden bei y 382) noch
+   liegt er am Rand.
+7. Alle sechs Sprachen: `BAYA BERRY BAIE BEERE BACCA BAGA`, mittig.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft

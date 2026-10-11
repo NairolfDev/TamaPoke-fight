@@ -40,6 +40,7 @@ enum StrId : uint8_t {
   // ASCII-Grossbuchstaben.
   S_BT_SUPER, S_BT_CRIT, S_BT_WEAK, S_BT_NONE, S_BT_EXHAUSTED, S_BT_FLEE,
   S_BT_READY,  // 4.4: offene Stufe, der naechste Sieg ist der Aufstieg
+  S_BT_BERRY,  // 6.5: Beerenbutton und Ereignistext
   // 5.3: Lerndialog beim Aufstieg, wenn alle vier Slots belegt sind
   S_LEARN_Q, S_LEARN_SKIP,
   // ficha: medallas

@@ -1217,6 +1217,14 @@ void render() {
 #define BT_FLEE_Y 296
 #define BT_FLEE_W 100
 #define BT_FLEE_H 28
+// 6.5: Beerenbutton mittig unter der Attackenreihe. Links ueber der Reihe
+// liegt der eigene HP-Balken (58,298)-(208,310), ein Spiegel der Flucht-
+// taste haette ihn verdeckt. Groesster Eckabstand (183,418) = 191,6 px,
+// also 39 px Luft zu Radius 231.
+#define BT_BERRY_W 100
+#define BT_BERRY_H 30
+#define BT_BERRY_X (CX - BT_BERRY_W / 2)
+#define BT_BERRY_Y 388
 
 void drawGameScene();  // Prototyp (weiter unten definiert)
 
@@ -1261,7 +1269,11 @@ static void btApplyEvents(BattleEvent *ev, uint8_t n) {
   for (uint8_t i = 0; i < n; i++) {
     const BattleEvent &e = ev[i];
     bool mine = (e.actor == 0);
-    if (e.berry) continue;
+    if (e.berry) {  // 6.5: geheilt, keine Angriffsanimation
+      btSetMsg(T(S_BT_BERRY));
+      sfxPlay(SFX_HEART);
+      continue;
+    }
     if (e.skipped || e.missed || e.stageOnly) continue;
 
     // Angreifer schlaegt zu, Ziel zuckt (nur wenn der Sprite die Aktion hat)
@@ -1497,6 +1509,18 @@ void renderBattle() {
     gfx->print(pp);
   }
 
+  // 6.5: Beere, einmal pro Kampf. berryLeft ist 0, wenn die Sorte noch
+  // unentdeckt oder die Beere schon gegessen ist - dann ausgegraut.
+  bool berry = btPl.berryLeft > 0;
+  gfx->fillRoundRect(BT_BERRY_X, BT_BERRY_Y, BT_BERRY_W, BT_BERRY_H, 10,
+                     berry ? UI_BAR_OK : UI_TRACK);
+  gfx->drawRoundRect(BT_BERRY_X, BT_BERRY_Y, BT_BERRY_W, BT_BERRY_H, 10,
+                     berry ? ink : UI_TRACK);
+  gfx->setTextColor(berry ? UI_INK : 0x8410);
+  gfx->setTextSize(2);
+  gfx->setCursor(CX - strlen(T(S_BT_BERRY)) * 6, BT_BERRY_Y + 8);
+  gfx->print(T(S_BT_BERRY));
+
   // Fluchtbutton - nur im freien Kampf, in der Arena spaeter nicht
   gfx->fillRoundRect(BT_FLEE_X, BT_FLEE_Y, BT_FLEE_W, BT_FLEE_H, 10, UI_TRACK);
   gfx->drawRoundRect(BT_FLEE_X, BT_FLEE_Y, BT_FLEE_W, BT_FLEE_H, 10, ink);
@@ -1591,6 +1615,13 @@ void battleTap(int16_t x, int16_t y) {
     pet.battleCost();
     sfxPlay(SFX_DENY);
     btClose();
+    return;
+  }
+
+  if (x >= BT_BERRY_X && x <= BT_BERRY_X + BT_BERRY_W && y >= BT_BERRY_Y &&
+      y <= BT_BERRY_Y + BT_BERRY_H) {
+    if (btPl.berryLeft == 0) { sfxPlay(SFX_DENY); return; }  // ausgegraut
+    btRunRound(SLOT_BERRY);  // kostet die Runde, der Gegner greift an
     return;
   }
 
