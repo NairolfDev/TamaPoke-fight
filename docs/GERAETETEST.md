@@ -197,6 +197,19 @@ Nebenbei behebt das Raster zwei Fehler des alten: dort ragte die oberste
 Kachelreihe 13 px über den Rand, und auf Deutsch und Italienisch lief der
 Text 16 px über die Kachel hinaus.
 
+## A10. i18n ohne die toten Strings
+
+Neun Texte von Sackhauen und Ballspiel sind aus `StrId` und allen sechs
+Tabellen entfernt (94 → 85). Headless ist geprüft, dass jeder verbleibende
+Eintrag in jeder Sprache exakt seinen alten Text behält
+(`python3 tools/check_i18n.py`). Am Gerät nur die Stichprobe, dass das stimmt:
+
+- In jeder der sechs Sprachen: Statuszeile, Balkenbeschriftung
+  (`ESS FRO ENE HYG` auf Deutsch), Uhr stellen, Statuskarte Seite 4
+  (Fortschritt), Freilassen-Dialog (`JA`/`NEIN`) und Sound-Schalter.
+- Verrutscht wäre sichtbar als Text, der zum Feld davor oder danach gehört —
+  etwa `SPRACHE` dort, wo `MIN` stehen sollte.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft

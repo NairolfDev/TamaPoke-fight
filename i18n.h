@@ -25,9 +25,6 @@ enum StrId : uint8_t {
   S_NAME_FMT,      // "%s%s Nv.%u"
   // dialogo soltar
   S_RELEASE_FMT, S_YES, S_NO,
-  // minijuego y saco
-  S_HITS_FMT, S_STR_GAIN_FMT, S_NEW_RECORD, S_RECORD_FMT, S_HIT_FAST,
-  S_SCORE_FMT, S_GREAT_JOY, S_PLUS_JOY,
   // reloj / ajustes
   S_SET_TIME, S_HOUR, S_MIN, S_CLOCK_CANCEL, S_LANG_LABEL,
   // celebracion
@@ -51,8 +48,6 @@ enum StrId : uint8_t {
   S_NAME, S_DETAIL_BACK,
   // barras
   S_BAR_FOOD, S_BAR_JOY, S_BAR_ENE, S_BAR_HYG,
-  // marcador en vivo del minijuego
-  S_REC_FMT,
   // ficha: pagina de progreso
   S_PROGRESS, S_LVL_FMT, S_NEXT_LVL_FMT, S_EVO_LABEL, S_FINAL_FORM,
   S_EVO_READY, S_EVO_BLOCKED, S_EVO_IN_FMT, S_MISTAKES_FMT,
