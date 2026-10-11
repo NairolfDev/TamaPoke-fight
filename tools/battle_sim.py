@@ -548,6 +548,17 @@ def pick_foe_level(player_level, rng, spread=FOE_LEVEL_SPREAD):
     return low if high == low else low + rng.randrange(high - low + 1)
 
 
+# Mitleid (ersetzt 6.7 "ab 3: -1 je weiterer, max -4"): jede Niederlage in
+# Folge senkt das Gegnerlevel auf drei Viertel. Ohne Deckel - nur so ist ein
+# Sieg auch mit sehr schwachen Spezies nach wenigen Versuchen garantiert.
+def pity_level(level, loss_streak):
+    for _ in range(loss_streak):
+        if level <= 1:
+            break
+        level = level * 3 // 4
+    return max(1, level)
+
+
 def make_player(dex, level, rng, bond=0, energy=100, berry=False):
     # Gene wie in pet.cpp beim Schluepfen: 90 + random(21)
     genes = tuple(90 + rng.randrange(21) for _ in range(3))
@@ -835,6 +846,20 @@ def self_test():
     rng = random.Random(4)
     res, k = run_arena(make_player(6, 30, rng), 1, rng, make_rival(4, 32))
     assert (res, k) == ('win', 3) or (res == 'loss' and 1 <= k <= 3)
+
+    # Mitleid: jede Niederlage in Folge -> drei Viertel des Levels, nie 0
+    assert pity_level(30, 0) == 30
+    assert pity_level(30, 1) == 22
+    assert pity_level(30, 2) == 16
+    assert pity_level(2, 1) == 1
+    assert pity_level(1, 5) == 1, 'Level 0 zerbricht die HP-Formel'
+    assert pity_level(100, 255) == 1
+    for lv in range(1, 101):
+        prev = lv
+        for k in range(12):
+            cur = pity_level(lv, k)
+            assert 1 <= cur <= prev, (lv, k)
+            prev = cur
 
     # Ein Kampf laeuft durch und endet mit gueltigem Ergebnis
     rng = random.Random(7)

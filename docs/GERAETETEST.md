@@ -292,6 +292,19 @@ Der Kopf zeigt `%u/11`. Prüfschritte aus A9 gelten weiter.
 `MED_ARENA` selbst gibt es erst, wenn Rang 8 im echten Lauf geschafft wird —
 das braucht den Einstieg aus D6.
 
+## A14. Mitleidsregel
+
+Nach jeder Niederlage in Folge kommt der nächste Gegner auf drei Vierteln des
+Levels, Untergrenze 1. Ein Sieg setzt zurück.
+
+1. `LVL 30`, `STATS` → `pech=0`.
+2. `ENE 100`, dann absichtlich verlieren (fliehen zählt **nicht**, nur ein
+   verlorener Kampf). `STATS` → `pech=1`.
+3. `BATTLE 25` → der Gegner steht auf etwa 22 statt 28–30. Noch eine
+   Niederlage → etwa 16.
+4. Einen Kampf gewinnen → `pech=0`, die Gegner sind wieder auf 28–30.
+5. Neustart zwischendurch → `pech` bleibt (liegt unter `lstrk` in NVS).
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft

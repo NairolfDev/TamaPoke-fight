@@ -151,6 +151,12 @@ uint8_t pickFoeLevel(uint8_t playerLevel, uint8_t spread) {
   return hi == lo ? lo : (uint8_t)(lo + random(hi - lo + 1));
 }
 
+uint8_t pityLevel(uint8_t level, uint8_t lossStreak) {
+  uint16_t l = level;
+  for (uint8_t i = 0; i < lossStreak && l > 1; i++) l = l * 3 / 4;
+  return l < 1 ? 1 : (uint8_t)l;
+}
+
 uint16_t pickWildDex(int8_t biome) {
   uint16_t cand[DEX_COUNT];
   uint16_t n = 0;

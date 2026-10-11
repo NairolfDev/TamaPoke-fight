@@ -98,6 +98,10 @@ void foeLevelRange(uint8_t playerLevel, uint8_t spread, uint8_t *low,
                    uint8_t *high);
 uint8_t pickFoeLevel(uint8_t playerLevel, uint8_t spread);
 
+// Mitleid: jede Niederlage in Folge senkt das Gegnerlevel auf drei Viertel,
+// Untergrenze 1. Ohne Deckel, damit niemand haengen bleibt.
+uint8_t pityLevel(uint8_t level, uint8_t lossStreak);
+
 // 6.3: zufaellige nicht-legendaere Spezies. Mit biome >= 0 auf das Biom
 // gefiltert, sonst aus dem ganzen Dex.
 uint16_t pickWildDex(int8_t biome);

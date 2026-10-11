@@ -463,7 +463,8 @@ void battleCmd(uint16_t dex) {
   Fighter pl, fo;
   fighterFromPet(pl, pet);
   bool shiny = random(64) == 0;  // 6.3: Shiny-Gegner 1 zu 64
-  fighterFromDex(fo, dex, pickFoeLevel(pl.level, 2), shiny);
+  fighterFromDex(fo, dex, pityLevel(pickFoeLevel(pl.level, 2), pet.lossStreak),
+                 shiny);
   Serial.printf("%s Lv%u (%u HP, atk=%u def=%u spe=%u) vs %s Lv%u (%u HP)%s\n",
                 DEX_TBL[pl.dex].name, pl.level, pl.maxHp, pl.atk, pl.def,
                 pl.spe, DEX_TBL[fo.dex].name, fo.level, fo.maxHp,
@@ -658,9 +659,9 @@ void handleSerial() {
                   pet.weight, pet.atkStat(), pet.defStat(), pet.speStat(),
                   pet.geneAtk, pet.geneDef, pet.geneSpe,
                   pet.trAtk, pet.trDef, pet.trSpe, pet.berryKnown);
-    Serial.printf("shiny=%d streak=%u/%u bond=%u medals=0x%X(%u) nick=%s\n",
+    Serial.printf("shiny=%d streak=%u/%u bond=%u medals=0x%X(%u) nick=%s pech=%u\n",
                   pet.shiny, pet.streak, pet.bestStreak, pet.bond, pet.medals,
-                  pet.totalMedals, pet.nick);
+                  pet.totalMedals, pet.nick, pet.lossStreak);
     Serial.println("DONE");
   } else if (line.startsWith("BOND ")) {
     pet.setBond((uint8_t)line.substring(5).toInt());
@@ -1383,7 +1384,9 @@ void startBattle() {
   }
 
   fighterFromPet(btPl, pet);
-  fighterFromDex(btFo, dex, pickFoeLevel(btPl.level, 2), shiny);
+  // Mitleid: nach Niederlagen in Folge kommt ein schwaecherer Gegner
+  fighterFromDex(btFo, dex, pityLevel(pickFoeLevel(btPl.level, 2), pet.lossStreak),
+                 shiny);
 
   // CLAUDE.md: vor dem Laden eines neuen Sprite-Slots das PSRAM pruefen.
   // Ein PMD-Sprite kostet bis zu ~220 KB; ohne Reserve lieber ohne Bild
