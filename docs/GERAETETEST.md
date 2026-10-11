@@ -218,7 +218,7 @@ Phase 6 (§5.5). Der Rivale liegt als ein Block unter dem NVS-Schlüssel
 **Startwert.** Auf einem Gerät mit Altdaten gibt es den Schlüssel noch nicht:
 
 1. `RIVAL` → `rivale (startwert) Glumanda #4 … gene=100/100/100 ende=abschied`,
-   darunter die Kampfwerte auf **Spielerlevel + 2** und `heute bereit=1`.
+   darunter die Kampfwerte auf **Spielerlevel** und `heute bereit=1`.
 
 **Konsole.**
 
@@ -242,6 +242,10 @@ Vorher `STATS` notieren (Spezies, Gene, Spitzname, Shiny).
 Der Kampf gegen den Rivalen selbst (einmal pro Kalendertag, doppelte XP) hat
 noch keinen Einstieg in der UI — siehe B6, die Prüfschritte kommen dort dazu.
 
+Entspannt (Plan 2026-10-11): der Rivale kämpft auf Spielerlevel mit der
+Arena-KI, und nur ein **Sieg** verbraucht den Tag. Prüfbar, sobald der
+UI-Einstieg (B6) gebaut ist.
+
 ## A12. Beerenbutton im Kampf
 
 §6.5. Button `BEERE` mittig unter der Attackenreihe, 100×30 bei
@@ -262,35 +266,32 @@ noch keinen Einstieg in der UI — siehe B6, die Prüfschritte kommen dort dazu.
    liegt er am Rand.
 7. Alle sechs Sprachen: `BAYA BERRY BAIE BEERE BACCA BAGA`, mittig.
 
-## A13. Arena: Rang, Konsole, Medaille
+## A13. Arena: Rang, Fortschritt pro Gegner, Medaille
 
-Phase 7 (§7), noch ohne eigenes Icon. Der Rang liegt unter dem NVS-Schlüssel
-`arena` und gehört dem Spieler.
+Phase 7 (§7), entspannt, noch ohne eigenes Icon. Rang unter `arena`,
+Fortschritt im laufenden Rang unter `arstep`, beides gehört dem Spieler.
 
-1. `ARENA` → `arenarang 0/8`, darunter Rang 1 mit KI `arena` und drei
-   Gegnern `Kleinstein Rihorn Onix` auf Spielerlevel + 1, dann ein headless
-   gespielter Lauf: `kampf 1 … hp x/y`, `kampf 2 …`. **Die HP am Ende von
-   Kampf 1 sind die HP am Anfang von Kampf 2** — sinkt der Wert nur, nie
-   zurück auf voll, heilt die Arena korrekt nicht. `STATS` danach: nichts
-   hat sich verändert (der Lauf kämpft mit einer Kopie).
-2. `ARENA 2` → Rang 3 wird gezeigt: `Voltobal Pikachu RIVALE <Name>`, der
-   Rivale auf Spielerlevel + 2, die beiden anderen auf + 2.
-3. `ARENA 5` → `ki elite`, `ARENA 7` → Rang 8: Gegner auf + 3, Rivale auf + 2.
-4. Statuskarte Seite 4 (Fortschritt): Zeile `ARENA 7/8` bei y 284 zwischen
-   Evolutionszeile und Versäumnissen, nichts überlappt. Bei Rang 0 grau.
-5. Neustart → der Rang ist noch da.
-6. **Generationswechsel:** `BYE`, Zeremonie, schlüpfen lassen → der Rang ist
-   **noch da**, er gehört dem Spieler.
-7. `ARENA 0` zurücksetzen.
+1. **Altgerät:** hat das Gerät schon einen `arena`-Wert aus dem alten
+   Teamsatz, zeigt `ARENA` ihn weiter als „so viele Ränge geschafft",
+   `schritt 0/3`, kein Absturz.
+2. `ARENA 0`, dann `ARENA` → `arenarang 0/8 schritt 0/3`, `rang 1 gegner 1/3:
+   Sterndu Lv<Spieler−2>, ki wild`, dazu ein Probekampf. Nichts am Pet ändert
+   sich (`STATS` vorher/nachher gleich).
+3. `ARENA 4` → Rang 5 Gestein: `Amonitas`, Gegner auf Spieler −1, `ki arena`.
+4. `ARENA 7` → Rang 8 Feuer: `Fukano` auf Spielerlevel.
+5. Mit `pech=2` (zwei Niederlagen, siehe A14) zeigt `ARENA` den Gegner auf
+   gut der Hälfte seines Levels.
+6. Statuskarte Seite 4: `ARENA 7/8` bei y 284, bei Rang 0 grau.
+7. Neustart → Rang und Schritt sind noch da. Generationswechsel (`BYE`,
+   schlüpfen) → beide **noch da**.
+8. `ARENA 0` zurücksetzen.
 
-**Medaillenseite mit elf Medaillen.** Das Raster ist wieder neu: zwei Spalten
-mal **sechs** Reihen, Kachel 180×32, y 100 + Reihe·40, letzte Reihe endet bei
-332. Engste Stelle die obere Ecke der ersten Reihe, 227,9 px vom Mittelpunkt —
-dort hinsehen. Die elfte Medaille (`ARENA RANG 8`) steht allein links unten.
-Der Kopf zeigt `%u/11`. Prüfschritte aus A9 gelten weiter.
+**Medaillenseite mit elf Medaillen:** zwei Spalten mal sechs Reihen, Kachel
+180×32, letzte Reihe endet bei 332, engste Stelle 227,9 px vom Mittelpunkt.
+Der Kopf zeigt `%u/11`.
 
-`MED_ARENA` selbst gibt es erst, wenn Rang 8 im echten Lauf geschafft wird —
-das braucht den Einstieg aus D6.
+Der echte Arenakampf auf dem Bildschirm, `arenaFoeBeaten()` und `MED_ARENA`
+brauchen den Einstieg aus D6.
 
 ## A14. Mitleidsregel
 

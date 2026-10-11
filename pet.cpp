@@ -464,6 +464,16 @@ void Pet::arenaWin(uint8_t rank) {
   save();
 }
 
+void Pet::arenaFoeBeaten() {
+  if (arenaRank >= 8) return;
+  if (++arenaStep < 3) {
+    save();
+    return;
+  }
+  arenaStep = 0;
+  arenaWin(arenaRank + 1);  // speichert selbst
+}
+
 void Pet::hatch() {
   speciesId = eggTarget;
   shiny = eggShiny;
@@ -835,6 +845,7 @@ void Pet::save() {
   prefs.putBytes("rival", &rival, sizeof(rival));
   prefs.putUInt("rivday", rivalDay);
   prefs.putUChar("arena", arenaRank);
+  prefs.putUChar("arstep", arenaStep);
   prefs.putUChar("nvs", nvsVer);
 }
 
@@ -901,6 +912,8 @@ void Pet::load() {
     prefs.getBytes("rival", &rival, sizeof(rival));
   rivalDay = prefs.getUInt("rivday", 0);
   arenaRank = prefs.getUChar("arena", 0);
+  arenaStep = prefs.getUChar("arstep", 0);
+  if (arenaStep > 2) arenaStep = 0;  // kaputter Wert: Rang neu beginnen
   nvsVer = prefs.getUChar("nvs", 1);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);

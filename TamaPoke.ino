@@ -389,43 +389,29 @@ static void simPlayer(Fighter &f, uint16_t dex, uint8_t level) {
 // BATTLE <dex>: ein Kampf des echten Pets gegen die Spezies, Runde fuer Runde
 // mitgeschrieben. Wendet noch KEINE Kosten und Belohnungen aus 6.7 an - das
 // gehoert in die UI-Phase.
-// 7: Rang und naechster Gegner, dazu der naechste Rang einmal headless.
-// Kaempft mit einer Kopie des Spielers - Pet, AP und Rang bleiben, wie sie
-// sind. Die HP-Zeile zeigt, dass nichts zwischen den Kaempfen heilt.
+// 7: Rang, Fortschritt und naechster Gegner, dazu dieser eine Kampf
+// headless. Kaempft mit einer Kopie des Spielers - Pet, AP und Rang bleiben.
 void arenaCmd() {
-  Serial.printf("arenarang %u/8\n", pet.arenaRank);
+  Serial.printf("arenarang %u/8 schritt %u/3\n", pet.arenaRank, pet.arenaStep);
   if (pet.arenaRank >= ARENA_RANKS || pet.isEgg()) {
     Serial.println("DONE");
     return;
   }
   uint8_t rank = pet.arenaRank + 1;
-  Fighter pl;
+  Fighter pl, fo;
   fighterFromPet(pl, pet);
-  Serial.printf("rang %u, ki %s:", rank,
-                arenaFoeAi(rank) == AI_ARENA ? "arena" : "elite");
-  for (uint8_t i = 0; i < 3; i++) {
-    Fighter fo;
-    arenaFoe(fo, rank, i, pl.level, pet.rival);
-    Serial.printf(" %s%s Lv%u", ARENA_TEAMS[rank - 1][i] ? "" : "RIVALE ",
-                  DEX_TBL[fo.dex].name, fo.level);
-  }
-  Serial.println();
-  for (uint8_t i = 0; i < 3; i++) {
-    Fighter fo;
-    arenaFoe(fo, rank, i, pl.level, pet.rival);
-    if (i) arenaNextFight(pl, pet.berryKnown);
-    uint8_t ai = ARENA_TEAMS[rank - 1][i] ? arenaFoeAi(rank) : AI_ELITE;
-    uint8_t rounds = 0;
-    uint8_t res = battleRun(pl, fo, AI_ELITE, ai, &rounds);
-    Serial.printf("kampf %u: %s nach %u runden, hp %u/%u\n", i + 1,
-                  res == BR_WIN ? "WIN" : res == BR_LOSS ? "LOSS" : "DRAW",
-                  rounds, pl.hp, pl.maxHp);
-    if (res != BR_WIN) break;
-  }
+  arenaFoe(fo, rank, pet.arenaStep, pl.level, pet.lossStreak);
+  Serial.printf("rang %u gegner %u/3: %s Lv%u, ki %s\n", rank,
+                pet.arenaStep + 1, DEX_TBL[fo.dex].name, fo.level,
+                arenaFoeAi(rank) == AI_WILD ? "wild" : "arena");
+  uint8_t rounds = 0;
+  uint8_t res = battleRun(pl, fo, AI_ELITE, arenaFoeAi(rank), &rounds);
+  Serial.printf("probekampf: %s nach %u runden\n",
+                res == BR_WIN ? "WIN" : res == BR_LOSS ? "LOSS" : "DRAW", rounds);
   Serial.println("DONE");
 }
 
-// 5.5: zeigt den Rivalenslot und seine Kampfwerte auf Spielerlevel + 2.
+// 5.5: zeigt den Rivalenslot und seine Kampfwerte auf Spielerlevel.
 // Veraendert nichts - der Kampf selbst laeuft ueber die Engine wie jeder
 // andere, gemessen wird er im Simulator (battle_sim.py --rival).
 void rivalCmd() {

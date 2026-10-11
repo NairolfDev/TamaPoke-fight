@@ -465,58 +465,32 @@ uint8_t battleRound(Fighter &pl, Fighter &fo, int8_t plSlot, uint8_t foeAi,
   return outcome(pl, fo);
 }
 
-// 7: Gestein, Wasser, Elektro, Pflanze, Gift, Psycho, Feuer, Boden.
+// 7 (entspannt): nach gemessener Schwierigkeit sortiert, leicht -> schwer.
 const uint16_t ARENA_TEAMS[ARENA_RANKS][3] = {
-  { 74, 111, 95 },   // Kleinstein, Rihorn, Onix
-  { 120, 118, 121 }, // Sterndu, Goldini, Starmie
-  { 100, 25, 0 },    // Voltobal, Pikachu, Rivale
-  { 114, 70, 45 },   // Tangela, Ultrigaria, Giflor
-  { 109, 89, 110 },  // Smogon, Sleimok, Smogmog
-  { 64, 122, 0 },    // Kadabra, Pantimos, Rivale
-  { 58, 78, 59 },    // Fukano, Gallopa, Arkani
-  { 51, 34, 0 },     // Digdri, Nidoking, Rivale
+  { 120, 118, 121 },  // Wasser: Sterndu, Goldini, Starmie
+  { 100, 25, 101 },   // Elektro: Voltobal, Pikachu, Lektrobal
+  { 114, 70, 45 },    // Pflanze: Tangela, Ultrigaria, Giflor
+  { 109, 89, 110 },   // Gift: Smogon, Sleimok, Smogmog
+  { 138, 140, 141 },  // Gestein: Amonitas, Kabuto, Kabutops
+  { 64, 122, 97 },    // Psycho: Kadabra, Pantimos, Hypno
+  { 57, 68, 106 },    // Kampf: Rasaff, Machomei, Kicklee
+  { 58, 78, 59 },     // Feuer: Fukano, Gallopa, Arkani
 };
 
+static const int8_t ARENA_LEVEL_OFFSET[ARENA_RANKS] = { -2, -2, -1, -1, -1, 0, 0, 0 };
+
 uint8_t arenaFoeLevel(uint8_t rank, uint8_t playerLevel) {
-  uint16_t l = playerLevel + (rank <= 2 ? 1 : rank <= 5 ? 2 : 3);
+  int16_t l = (int16_t)playerLevel + ARENA_LEVEL_OFFSET[rank - 1];
+  if (l < 1) l = 1;
   return l > LEVEL_CAP ? LEVEL_CAP : (uint8_t)l;
 }
 
-uint8_t arenaFoeAi(uint8_t rank) { return rank <= 4 ? AI_ARENA : AI_ELITE; }
+uint8_t arenaFoeAi(uint8_t rank) { return rank <= 4 ? AI_WILD : AI_ARENA; }
 
 void arenaFoe(Fighter &f, uint8_t rank, uint8_t idx, uint8_t playerLevel,
-              const Rival &r) {
-  uint16_t dex = ARENA_TEAMS[rank - 1][idx];
-  if (dex == 0) {
-    // 5.5 sagt "immer Spielerlevel + 2", die Tabelle in 7 sagt fuer Rang
-    // 6-8 "+3". Der Rivale folgt seiner eigenen Regel.
-    uint16_t l = playerLevel + 2;
-    fighterFromRival(f, r, l > LEVEL_CAP ? LEVEL_CAP : (uint8_t)l);
-  } else {
-    fighterFromDex(f, dex, arenaFoeLevel(rank, playerLevel), false);
-  }
-}
-
-void arenaNextFight(Fighter &pl, bool berryKnown) {
-  pl.status = ST_NONE;
-  pl.atkStage = pl.defStage = 0;
-  pl.berryLeft = berryKnown ? 1 : 0;
-  pl.endureLeft = 1;
-}
-
-uint8_t arenaRun(Fighter &pl, uint8_t rank, const Rival &r, bool berryKnown,
-                 uint8_t plAi, uint8_t *fought) {
-  if (fought) *fought = 0;
-  if (rank < 1 || rank > ARENA_RANKS) return BR_LOSS;
-  for (uint8_t i = 0; i < 3; i++) {
-    Fighter fo;
-    arenaFoe(fo, rank, i, pl.level, r);
-    if (i) arenaNextFight(pl, berryKnown);
-    if (fought) (*fought)++;
-    uint8_t ai = ARENA_TEAMS[rank - 1][i] ? arenaFoeAi(rank) : AI_ELITE;
-    if (battleRun(pl, fo, plAi, ai, nullptr) != BR_WIN) return BR_LOSS;
-  }
-  return BR_WIN;
+              uint8_t lossStreak) {
+  fighterFromDex(f, ARENA_TEAMS[rank - 1][idx],
+                 pityLevel(arenaFoeLevel(rank, playerLevel), lossStreak), false);
 }
 
 uint8_t battleRun(Fighter &pl, Fighter &fo, uint8_t plAi, uint8_t foeAi,

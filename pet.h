@@ -111,6 +111,9 @@ public:
   // 7: hoechster geschaffter Arenarang, 0-8. Gehoert dem Spieler, nicht dem
   // Individuum - hatch() fasst ihn deshalb nicht an.
   uint8_t arenaRank = 0;
+  // 7 (entspannt): Gegner im laufenden Rang (arenaRank + 1), die schon
+  // besiegt sind, 0-2. Fortschritt pro Gegner statt drei Siege am Stueck.
+  uint8_t arenaStep = 0;
   uint8_t nvsVer = NVS_VER;  // Schemaversion, siehe migrate() in pet.cpp
 
   // 4.2: xpMinutes zaehlt pro Spielminute um 1 hoch und STOPPT bei
@@ -124,18 +127,17 @@ public:
   void levelUp();               // 4.2: nach gewonnenem Levelkampf
   // 4.3: XP aus freiem Kampf. rival verdoppelt sie (5.5).
   void addBattleXp(uint8_t foeLevel, bool rival = false);
-  // 5.5: einmal pro echtem Kalendertag. markRivalFought() beim Kampfstart,
-  // damit Flucht und Niederlage den Tag ebenfalls verbrauchen.
+  // 5.5: einmal pro echtem Kalendertag. markRivalFought() nur nach einem
+  // SIEG - nach einer Niederlage darf man gleich nochmal (entspannt).
   bool rivalReady() const { return rivalDay != today() + 1; }
   void markRivalFought();
   void setRival(uint16_t dex, uint8_t endKind);  // Konsole: RIVAL <dex>
   // 7: Rang rank geschafft (alle drei Kaempfe). Nur der naechste Rang zaehlt.
   void arenaWin(uint8_t rank);
-  void setArenaRank(uint8_t r) { arenaRank = r > 8 ? 8 : r; save(); }  // Konsole
-  uint8_t rivalLevel() const {  // 5.5: immer Spielerlevel + 2
-    uint16_t l = level() + 2;
-    return l > LEVEL_CAP ? LEVEL_CAP : (uint8_t)l;
-  }
+  void setArenaRank(uint8_t r) { arenaRank = r > 8 ? 8 : r; arenaStep = 0; save(); }  // Konsole
+  // 7: ein Arenagegner ist gefallen. Der dritte schliesst den Rang ab.
+  void arenaFoeBeaten();
+  uint8_t rivalLevel() const { return level(); }  // 5.5 (entspannt)
   void migrate();               // 5.4: NVS-Schema hochziehen
   void setLevel(uint8_t lv);    // Testhilfe fuer den LVL-Konsolenbefehl
   // Testhilfen fuer BOND und ENE auf der Konsole. save() ist privat, deshalb

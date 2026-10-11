@@ -27,6 +27,8 @@ enum : uint8_t {
   AI_ARENA,  // zu 60 % bester Typvorteil, sonst zufaellig
   AI_ELITE,  // staerkste Attacke; Statusattacken oberhalb 70 % HP
 };
+// 6.6 (entspannt): der Rivale waehlt wie Arena Rang 1-4, nicht wie die Elite.
+#define RIVAL_AI AI_ARENA
 
 // Statuszustaende. Gelten nur bis Kampfende und werden nie persistiert -
 // ein vergiftetes Pokemon darf das Pflegespiel nicht kaputtmachen (5.2).
@@ -136,23 +138,20 @@ uint8_t battleRound(Fighter &pl, Fighter &fo, int8_t plSlot, uint8_t foeAi,
 // --- Arena (7) ------------------------------------------------------------
 
 #define ARENA_RANKS 8
-// Drei Pokemon je Rang, Typthema in der Reihenfolge der Gen-1-Arenen.
-// 0 = der Rivale (Raenge 3, 6, 8).
+// Drei Pokemon je Rang, nach gemessener Schwierigkeit sortiert: Wasser,
+// Elektro, Pflanze, Gift, Gestein, Psycho, Kampf, Feuer. Kein Rivale, und
+// kein Gegner, gegen den eine Spezies gar keinen Schaden machen kann -
+// battle_sim.py --self-test prueft das fuer alle 151.
 extern const uint16_t ARENA_TEAMS[ARENA_RANKS][3];
 
-// rank ist 1-8. Gegnerlevel nach der Tabelle in 7, KI nach 6.6.
+// rank ist 1-8. Gegnerlevel Spieler -2/-1/0, nie unter 1. KI 1-4 wild,
+// 5-8 arena.
 uint8_t arenaFoeLevel(uint8_t rank, uint8_t playerLevel);
 uint8_t arenaFoeAi(uint8_t rank);
-// Gegner idx (0-2) des Rangs. Der Rivale behaelt sein Level aus 5.5.
+// Gegner idx (0-2) des Rangs, mit Mitleidsregel. Ein Arenakampf ist ein
+// gewoehnlicher Kampf: volle HP, normale Kosten, normale XP.
 void arenaFoe(Fighter &f, uint8_t rank, uint8_t idx, uint8_t playerLevel,
-              const Rival &r);
-// Zwischen zwei Arenakaempfen: HP und AP bleiben, Status, Stufen, Beere und
-// K.-o.-Rettung gelten pro Kampf und werden frisch.
-void arenaNextFight(Fighter &pl, bool berryKnown);
-// Ein ganzer Rang ohne UI: BR_WIN nur, wenn alle drei fallen. fought zaehlt
-// die angetretenen Kaempfe und darf 0 sein.
-uint8_t arenaRun(Fighter &pl, uint8_t rank, const Rival &r, bool berryKnown,
-                 uint8_t plAi, uint8_t *fought);
+              uint8_t lossStreak);
 
 // Ganzer Kampf ohne UI, fuer BSIM. rounds darf 0 sein.
 uint8_t battleRun(Fighter &pl, Fighter &fo, uint8_t plAi, uint8_t foeAi,

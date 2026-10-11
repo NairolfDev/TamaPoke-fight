@@ -566,9 +566,9 @@ def make_foe(dex, level):
     return Combatant(dex, level, genes=(100, 100, 100))
 
 
-# 5.5: der Rivale kaempft immer auf Spielerlevel + 2, gedeckelt bei 100.
+# 5.5 (entspannt): der Rivale kaempft auf Spielerlevel.
 def rival_level(player_level):
-    return min(player_level + 2, 100)
+    return player_level
 
 
 def make_rival(dex, level, genes=(100, 100, 100), grudge=False):
@@ -594,61 +594,59 @@ def pick_rival(player_level, rng, rival_dex, grudge):
 # Arena (7)
 # --------------------------------------------------------------------------
 
-# Wie ARENA_TEAMS in battle.cpp: Gestein, Wasser, Elektro, Pflanze, Gift,
-# Psycho, Feuer, Boden. 0 = der Rivale.
-ARENA_TEAMS = [(74, 111, 95), (120, 118, 121), (100, 25, 0), (114, 70, 45),
-               (109, 89, 110), (64, 122, 0), (58, 78, 59), (51, 34, 0)]
-ARENA_THEMES = ['rock', 'water', 'electric', 'grass', 'poison', 'psychic',
-                'fire', 'ground']
+# Wie ARENA_TEAMS in battle.cpp, nach gemessener Schwierigkeit sortiert.
+# Kein Rivale, kein Boden (Pikachu waere immun-gesperrt), kein Flug-Doppel-
+# typ (Tragosso). arena_dead_ends() im Selbsttest haelt das fest.
+ARENA_TEAMS = [(120, 118, 121), (100, 25, 101), (114, 70, 45), (109, 89, 110),
+               (138, 140, 141), (64, 122, 97), (57, 68, 106), (58, 78, 59)]
+ARENA_THEMES = ['water', 'electric', 'grass', 'poison', 'rock', 'psychic',
+                'fighting', 'fire']
+ARENA_LEVEL_OFFSET = [-2, -2, -1, -1, -1, 0, 0, 0]
+ARENA_TRY_CAP = 30   # nur fuer die Messung: so viele Versuche pro Gegner max.
+
+
+def arena_dead_ends():
+    """Paarungen, in denen der Spieler einem Arenagegner keinen Schaden
+    machen kann - jede Attacke hat Staerke 0 oder ist wirkungslos. Ein
+    solcher Rang waere fuer diese Spezies fuer immer gesperrt."""
+    out = []
+    for rank, team in enumerate(ARENA_TEAMS, 1):
+        for dex in team:
+            if not dex:
+                continue
+            foe = Combatant(dex, 30)
+            for p in BASE_STATS:
+                for lv in (5, 10, 20, 30, 40, 50):
+                    if all(move_power(m) == 0 or effectiveness(m, foe) == 0
+                           for m in moves_for_level(p, lv)):
+                        out.append((rank, dex, p, lv))
+    return out
 
 
 def arena_foe_level(rank, player_level):
-    return min(player_level + (1 if rank <= 2 else 2 if rank <= 5 else 3), 100)
+    return max(1, min(player_level + ARENA_LEVEL_OFFSET[rank - 1], 100))
 
 
 def arena_ai(rank):
-    return AI_ARENA if rank <= 4 else AI_ELITE
+    return AI_WILD if rank <= 4 else AI_ARENA
 
 
-def arena_next_fight(c, berry_known):
-    """Wie arenaNextFight(): HP und AP bleiben, der Rest gilt pro Kampf."""
-    c.status = ST_NONE
-    c.atk_stage = c.def_stage = 0
-    c.berry_left = 1 if berry_known else 0
-    c.endure_left = 1
-
-
-def run_arena(player, rank, rng, rival, berry_known=False,
-              player_ai=AI_ELITE):
-    """Ein ganzer Rang. ('win', 3) nur, wenn alle drei fallen, sonst
-    ('loss', Nummer des verlorenen Kampfs). rival ist ein fertiger Gegner -
-    er kaempft nach 5.5 auf Spielerlevel + 2, nicht nach der Rangtabelle."""
-    for i, dex in enumerate(ARENA_TEAMS[rank - 1]):
-        if dex:
-            foe, ai = make_foe(dex, arena_foe_level(rank, player.level)), arena_ai(rank)
-        else:
-            foe, ai = rival, AI_ELITE
-        if i:
-            arena_next_fight(player, berry_known)
-        result, _ = run_battle(player, foe, rng, player_ai, ai)
-        if result != 'win':
-            return 'loss', i + 1
-    return 'win', 3
-
-
-def simulate_arena(n, level, rank, rng, rival_dex=4, grudge=False,
-                   berry=False, bond=0, player_dex=None):
-    """n Laeufe eines Rangs. Liefert (geschafft, Summe der erreichten
-    Kaempfe)."""
-    wins = reached = 0
-    for _ in range(n):
-        player = make_player(player_dex or rng.choice(WILD_POOL), level, rng,
-                             bond, 100, berry)
-        rival = pick_rival(level, rng, rival_dex, grudge)
-        res, k = run_arena(player, rank, rng, rival, berry)
-        wins += res == 'win'
-        reached += k
-    return wins, reached
+def arena_rank_fights(pdex, level, rank, rng, berry=False, bond=0):
+    """Wie viele Kaempfe braucht diese Spezies fuer den ganzen Rang? Jeder
+    Arenakampf ist ein gewoehnlicher Kampf mit vollen HP; ein Sieg hakt den
+    Gegner ab, eine Niederlage erhoeht das Pech (Mitleidsregel)."""
+    fights = 0
+    streak = 0
+    for dex in ARENA_TEAMS[rank - 1]:
+        for _ in range(ARENA_TRY_CAP):
+            fights += 1
+            player = make_player(pdex, level, rng, bond, 100, berry)
+            foe = make_foe(dex, pity_level(arena_foe_level(rank, level), streak))
+            if run_battle(player, foe, rng, AI_ELITE, arena_ai(rank))[0] == 'win':
+                streak = 0
+                break
+            streak += 1
+    return fights
 
 
 def simulate(n, level, rng, bond=0, energy=100, berry=False,
@@ -663,7 +661,7 @@ def simulate(n, level, rng, bond=0, energy=100, berry=False,
     genau so entstehen Referenzzahlen, die nicht zu BSIM passen.
 
     rival_dex None = wilde Gegner. Sonst kaempft der Rivale nach 5.5 auf
-    Spielerlevel + 2, mit der Elite-KI aus 6.6 - foe_ai gilt dann nicht."""
+    Spielerlevel, mit der Arena-KI - foe_ai gilt dann nicht."""
     tally = {'win': 0, 'loss': 0, 'draw': 0}
     rounds_total = 0
     timeouts = 0
@@ -676,7 +674,7 @@ def simulate(n, level, rng, bond=0, energy=100, berry=False,
             ai = foe_ai
         else:
             foe = pick_rival(level, rng, rival_dex, grudge)
-            ai = AI_ELITE   # 6.6: Rivale = staerkste Attacke
+            ai = AI_ARENA   # 6.6 (entspannt): Rivale waehlt wie Arena 1-4
         result, rnds = run_battle(player, foe, rng, player_ai, ai)
         tally[result] += 1
         rounds_total += rnds
@@ -801,7 +799,7 @@ def self_test():
     saved.endure_left = 0
     assert not _survives(saved, rng, None), 'nur 1x pro Kampf'
 
-    # 5.5: Rivale. Groll +10 % ATK, eigene Gene, Level Spieler + 2
+    # 5.5: Rivale. Groll +10 % ATK, eigene Gene, Level = Spielerlevel
     plain = make_rival(4, 25)
     angry = make_rival(4, 25, grudge=True)
     assert angry.atk == plain.atk * 110 // 100, 'Groll'
@@ -812,31 +810,27 @@ def self_test():
     assert strong.atk == base_atk * 110 // 100 + 25, 'Gen ATK'
     assert strong.dfn == base_def * 90 // 100 + 25, 'Gen DEF'
     assert strong.max_hp == (base_hp * 2 + 110) * 25 // 100 + 25 + 10
-    assert rival_level(25) == 27 and rival_level(99) == 100
+    assert rival_level(25) == 25 and rival_level(100) == 100
     rng = random.Random(5)
     assert pick_rival(10, rng, 4, False).dex == 4
-    assert pick_rival(10, rng, 0, False).level == 12
+    assert pick_rival(10, rng, 0, False).level == 10
 
-    # 7: Arena. Teams typtreu und ohne Legendaere, Level nach Tabelle,
-    # keine Zwischenheilung.
+    # 7 (entspannt): Teams typtreu, ohne Legendaere, ohne Rivalen; Level nie
+    # ueber dem Spieler, nie unter 1; Fortschritt pro Gegner.
     for rank, (team, theme) in enumerate(zip(ARENA_TEAMS, ARENA_THEMES), 1):
+        assert len(team) == 3 and 0 not in team, 'kein Rivale in der Arena'
         for dex in team:
-            if dex:
-                assert TYPE_ID[theme] in species_types(dex), (rank, dex)
-                assert dex not in LEGENDARY
-        assert (0 in team) == (rank in (3, 6, 8)), 'Rivale in 3/6/8'
-    assert arena_foe_level(1, 20) == 21 and arena_foe_level(3, 20) == 22
-    assert arena_foe_level(8, 20) == 23 and arena_foe_level(8, 99) == 100
-    assert arena_ai(4) == AI_ARENA and arena_ai(5) == AI_ELITE
-    hurt = make_player(1, 25, random.Random(1), berry=True)
-    hurt.hp, hurt.berry_left, hurt.endure_left, hurt.atk_stage = 7, 0, 0, 2
-    arena_next_fight(hurt, True)
-    assert hurt.hp == 7, 'Arena heilt nicht zwischen den Kaempfen'
-    assert hurt.berry_left == 1 and hurt.endure_left == 1
-    assert hurt.atk_stage == 0
+            assert TYPE_ID[theme] in species_types(dex), (rank, dex)
+            assert dex not in LEGENDARY
+    assert ARENA_THEMES == ['water', 'electric', 'grass', 'poison', 'rock',
+                            'psychic', 'fighting', 'fire']
+    assert arena_foe_level(1, 20) == 18 and arena_foe_level(5, 20) == 19
+    assert arena_foe_level(8, 20) == 20 and arena_foe_level(8, 100) == 100
+    assert arena_foe_level(1, 1) == 1, 'Untergrenze 1'
+    assert arena_ai(4) == AI_WILD and arena_ai(5) == AI_ARENA
     rng = random.Random(4)
-    res, k = run_arena(make_player(6, 30, rng), 1, rng, make_rival(4, 32))
-    assert (res, k) == ('win', 3) or (res == 'loss' and 1 <= k <= 3)
+    k = arena_rank_fights(6, 30, 1, rng)
+    assert 3 <= k <= 3 * ARENA_TRY_CAP, k
 
     # Mitleid: jede Niederlage in Folge -> drei Viertel des Levels, nie 0
     assert pity_level(30, 0) == 30
@@ -851,6 +845,11 @@ def self_test():
             cur = pity_level(lv, k)
             assert 1 <= cur <= prev, (lv, k)
             prev = cur
+
+    # Keine Typ-Sackgassen: jede Spezies kann jeden Arenagegner verletzen.
+    # Sonst ist ein Rang fuer sie gesperrt, egal wie oft sie es versucht.
+    dead = arena_dead_ends()
+    assert not dead, 'Sackgassen (Rang, Gegner, Spieler, Lv): %s' % dead[:6]
 
     # Ein Kampf laeuft durch und endet mit gueltigem Ergebnis
     rng = random.Random(7)
@@ -905,13 +904,13 @@ def main(argv=None):
     ap.add_argument('--rival', type=int, default=None, metavar='DEX',
                     help='gegen den Rivalen kaempfen (5.5): DEX fest mit '
                          'Genen 100, 4 = Startwert Glumanda, 0 = zufaelliges '
-                         'frueheres Pokemon. Level Spieler+2, Elite-KI')
+                         'frueheres Pokemon. Level Spieler, Arena-KI')
     ap.add_argument('--grudge', action='store_true',
                     help='Rivale ist weggelaufen: +10 %% ATK')
     ap.add_argument('--arena', type=int, default=None, metavar='RANG',
-                    help='Arenarang 1-8 (7): drei Kaempfe ohne Zwischen'
-                         'heilung. Der Rivale in 3/6/8 kommt aus --rival '
-                         '(Vorgabe 4 = Glumanda)')
+                    help='Arenarang 1-8 (7, entspannt): wie viele Kaempfe '
+                         'braucht man fuer alle drei Gegner, Fortschritt pro '
+                         'Gegner, Mitleidsregel an')
     ap.add_argument('--verbose', action='store_true',
                     help='einen einzelnen Kampf mitschreiben')
     ap.add_argument('--self-test', action='store_true')
@@ -940,18 +939,16 @@ def main(argv=None):
         return 0
 
     if args.arena is not None:
-        rival_dex = 4 if args.rival is None else args.rival
-        wins, reached = simulate_arena(args.n, args.level, args.arena, rng,
-                                       rival_dex, args.grudge, args.berry,
-                                       args.bond, args.player_dex)
-        print('%d Laeufe, Rang %d (%s), Spielerlevel %d, Gegner Lv %d%s'
+        xs = sorted(arena_rank_fights(args.player_dex or rng.choice(WILD_POOL),
+                                      args.level, args.arena, rng, args.berry,
+                                      args.bond)
+                    for _ in range(args.n))
+        print('%d Laeufe, Rang %d (%s), Spielerlevel %d, Gegner Lv %d, KI %s'
               % (args.n, args.arena, ARENA_THEMES[args.arena - 1], args.level,
-                 arena_foe_level(args.arena, args.level),
-                 ', Rivale Dex %d' % rival_dex
-                 if 0 in ARENA_TEAMS[args.arena - 1] else ''))
-        print('Siege       %5d   %s' % (wins, _fmt(wins, args.n)))
-        avg10 = reached * 10 // args.n
-        print('Kaempfe     %5d.%d im Schnitt erreicht' % (avg10 // 10, avg10 % 10))
+                 arena_foe_level(args.arena, args.level), arena_ai(args.arena)))
+        avg10 = sum(xs) * 10 // args.n
+        print('Kaempfe fuer den Rang  Schnitt %d.%d  90 %% <= %d  max %d  (3 = perfekt)'
+              % (avg10 // 10, avg10 % 10, xs[int(0.9 * len(xs))], xs[-1]))
         return 0
 
     tally, rounds_total, timeouts = simulate(
@@ -963,7 +960,7 @@ def main(argv=None):
     n = args.n
     if args.rival is not None:
         who = ('Dex %d' % args.rival) if args.rival else 'zufaelliger Snapshot'
-        print('%d Kaempfe, Level %d gegen Rivale %s auf Lv %d%s (KI: elite)'
+        print('%d Kaempfe, Level %d gegen Rivale %s auf Lv %d%s (KI: arena)'
               % (n, args.level, who, rival_level(args.level),
                  ', Groll' if args.grudge else ''))
     else:
