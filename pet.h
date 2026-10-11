@@ -137,7 +137,8 @@ public:
   void setArenaRank(uint8_t r) { arenaRank = r > 8 ? 8 : r; arenaStep = 0; save(); }  // Konsole
   // 7: ein Arenagegner ist gefallen. Der dritte schliesst den Rang ab.
   void arenaFoeBeaten();
-  uint8_t rivalLevel() const { return level(); }  // 5.5 (entspannt)
+  // 5.5 (entspannt): Spielerlevel, mit der Mitleidsregel wie jeder Gegner.
+  uint8_t rivalLevel() const;
   void migrate();               // 5.4: NVS-Schema hochziehen
   void setLevel(uint8_t lv);    // Testhilfe fuer den LVL-Konsolenbefehl
   // Testhilfen fuer BOND und ENE auf der Konsole. save() ist privat, deshalb

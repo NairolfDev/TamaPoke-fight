@@ -1551,7 +1551,7 @@ void renderBattle() {
   gfx->setCursor(CX - strlen(T(S_BT_BERRY)) * 6, BT_BERRY_Y + 8);
   gfx->print(T(S_BT_BERRY));
 
-  // Fluchtbutton - nur im freien Kampf, in der Arena spaeter nicht
+  // Fluchtbutton in jedem Kampf, auch in der Arena (8, entspannt)
   gfx->fillRoundRect(BT_FLEE_X, BT_FLEE_Y, BT_FLEE_W, BT_FLEE_H, 10, UI_TRACK);
   gfx->drawRoundRect(BT_FLEE_X, BT_FLEE_Y, BT_FLEE_W, BT_FLEE_H, 10, ink);
   gfx->setTextColor(ink);

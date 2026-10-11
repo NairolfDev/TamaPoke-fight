@@ -658,7 +658,7 @@ täglicher Rivalenkampf.
 *Fertig, wenn:* nach einem Abschied das eigene Pokémon als Gegner auftaucht.
 
 **Phase 7 — Arena**
-Acht Ränge, Trainerteams, Rivale in 3/6/8, Belohnungen, drei neue Medaillen.
+Acht Ränge, Trainerteams (ohne Rivalen, Fortschritt pro Gegner), Belohnungen, drei neue Medaillen.
 *Fertig, wenn:* Rang 8 erreichbar ist und die Medaille vergeben wird.
 
 **Phase 8 — Härtung**

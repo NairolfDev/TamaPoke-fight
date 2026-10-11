@@ -571,6 +571,12 @@ def rival_level(player_level):
     return player_level
 
 
+# Das Level, auf dem der Rivale wirklich antritt: Spielerlevel mit der
+# Mitleidsregel wie jeder andere Gegner. Zwilling von Pet::rivalLevel().
+def rival_fight_level(player_level, loss_streak):
+    return pity_level(rival_level(player_level), loss_streak)
+
+
 def make_rival(dex, level, genes=(100, 100, 100), grudge=False):
     """Wie fighterFromRival() in battle.cpp: eigene Gene, kein Training,
     Groll +10 % ATK. Die Attacken kommen hier immer aus dem Learnset seines
@@ -674,7 +680,7 @@ def simulate(n, level, rng, bond=0, energy=100, berry=False,
             ai = foe_ai
         else:
             foe = pick_rival(level, rng, rival_dex, grudge)
-            ai = AI_ARENA   # 6.6 (entspannt): Rivale waehlt wie Arena 1-4
+            ai = AI_ARENA   # 6.6 (entspannt): Rivale waehlt wie Arena 5-8
         result, rnds = run_battle(player, foe, rng, player_ai, ai)
         tally[result] += 1
         rounds_total += rnds
@@ -747,7 +753,7 @@ def chill_report(n=2000, seed=1):
         genes = tuple(90 + rng.randrange(21) for _ in range(3))
         def make(streak, pdex=pdex, rdex=rdex, genes=genes):
             return (make_player(pdex, 30, rng),
-                    make_rival(rdex, pity_level(rival_level(30), streak), genes),
+                    make_rival(rdex, rival_fight_level(30, streak), genes),
                     AI_ARENA)
         xs.append(_tries_until_win(make, rng))
     check('Rivale: Versuche im Schnitt', _summary(xs)[0], 3.0)
@@ -880,6 +886,10 @@ def self_test():
     assert strong.dfn == base_def * 90 // 100 + 25, 'Gen DEF'
     assert strong.max_hp == (base_hp * 2 + 110) * 25 // 100 + 25 + 10
     assert rival_level(25) == 25 and rival_level(100) == 100
+    # Mitleidsregel gilt auch beim Rivalen (Review: fehlte in der API)
+    assert rival_fight_level(30, 0) == 30
+    assert rival_fight_level(30, 1) == 22
+    assert rival_fight_level(1, 9) == 1
     rng = random.Random(5)
     assert pick_rival(10, rng, 4, False).dex == 4
     assert pick_rival(10, rng, 0, False).level == 10
@@ -968,7 +978,7 @@ def main(argv=None):
     # 0 haelt die Abnahme aus Phase 10 gleichstufig, 2 ist die echte
     # Begegnungsspanne aus 6.3.
     ap.add_argument('--spread', type=int, default=0,
-                    help='Gegnerlevel Spielerlevel +/- N (0 = gleichstufig, '
+                    help='Gegnerlevel Spielerlevel - N bis Spielerlevel (0 = gleichstufig, '
                          '2 = Begegnung nach 6.3)')
     ap.add_argument('--rival', type=int, default=None, metavar='DEX',
                     help='gegen den Rivalen kaempfen (5.5): DEX fest mit '

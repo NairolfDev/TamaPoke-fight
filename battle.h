@@ -27,7 +27,8 @@ enum : uint8_t {
   AI_ARENA,  // zu 60 % bester Typvorteil, sonst zufaellig
   AI_ELITE,  // staerkste Attacke; Statusattacken oberhalb 70 % HP
 };
-// 6.6 (entspannt): der Rivale waehlt wie Arena Rang 1-4, nicht wie die Elite.
+// 6.6 (entspannt): der Rivale waehlt wie Arena Rang 5-8, nicht wie die Elite.
+// Sein Level kommt aus Pet::rivalLevel() - dort steckt die Mitleidsregel schon drin.
 #define RIVAL_AI AI_ARENA
 
 // Statuszustaende. Gelten nur bis Kampfende und werden nie persistiert -

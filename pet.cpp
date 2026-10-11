@@ -1,6 +1,7 @@
 #include "pet.h"
 #include "dex.h"
 #include "audio.h"
+#include "battle.h"  // pityLevel() fuer rivalLevel()
 #include "moves.h"  // movesForLevel, newMoveAt, MOVE_TBL (nur hier, nicht in pet.h:
                     // sonst bekommt jede Uebersetzungseinheit die Attackentabellen)
 
@@ -420,6 +421,8 @@ void Pet::snapshotRival(uint8_t endKind) {
   rival.set = true;
 }
 
+uint8_t Pet::rivalLevel() const { return pityLevel(level(), lossStreak); }
+
 void Pet::markRivalFought() {
   rivalDay = today() + 1;
   save();
@@ -459,6 +462,7 @@ void Pet::trainRandom(uint8_t n) {
 void Pet::arenaWin(uint8_t rank) {
   if (rank != arenaRank + 1 || rank > 8) return;
   arenaRank = rank;
+  arenaStep = 0;  // der naechste Rang beginnt beim ersten Gegner
   trainRandom(rank <= 2 ? 2 : rank <= 5 ? 3 : 5);
   checkMedals(rank == 8 ? MED_ARENA : 0);
   save();
@@ -470,8 +474,7 @@ void Pet::arenaFoeBeaten() {
     save();
     return;
   }
-  arenaStep = 0;
-  arenaWin(arenaRank + 1);  // speichert selbst
+  arenaWin(arenaRank + 1);  // setzt arenaStep zurueck und speichert
 }
 
 void Pet::hatch() {

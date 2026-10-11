@@ -217,7 +217,7 @@ Eintrag in jeder Sprache exakt seinen alten Text behält
 ## A11. Rivale: Slot, Snapshot, Konsole
 
 Phase 6 (§5.5). Der Rivale liegt als ein Block unter dem NVS-Schlüssel
-`rival`, dazu `rivday` für den Tag des letzten Rivalenkampfs.
+`rival`, dazu `rivday` für den Tag des letzten Rivalen**siegs**.
 
 **Startwert.** Auf einem Gerät mit Altdaten gibt es den Schlüssel noch nicht:
 
@@ -247,7 +247,9 @@ Der Kampf gegen den Rivalen selbst (einmal pro Kalendertag, doppelte XP) hat
 noch keinen Einstieg in der UI — siehe B6, die Prüfschritte kommen dort dazu.
 
 Entspannt (Plan 2026-10-11): der Rivale kämpft auf Spielerlevel mit der
-Arena-KI, und nur ein **Sieg** verbraucht den Tag. Prüfbar, sobald der
+Arena-KI, und nur ein **Sieg** verbraucht den Tag. Die Mitleidsregel gilt
+auch hier: mit `pech=1` (A14) zeigt `RIVAL` das Kampflevel auf drei
+Vierteln, mit `pech=2` auf gut der Hälfte. Prüfbar, sobald der
 UI-Einstieg (B6) gebaut ist.
 
 ## A12. Beerenbutton im Kampf
