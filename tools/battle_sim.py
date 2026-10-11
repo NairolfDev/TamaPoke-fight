@@ -555,22 +555,49 @@ def make_player(dex, level, rng, bond=0, energy=100, berry=False):
                      berry_known=berry, is_player=True)
 
 
-def make_foe(dex, level, grudge=False):
-    # 6.1: Gene fest auf 100 %, ausser beim Rivalen. Das Level waehlt der
-    # Aufrufer ueber pick_foe_level() - hier wird nichts mehr abgefangen.
-    return Combatant(dex, level, genes=(100, 100, 100), grudge=grudge)
+def make_foe(dex, level):
+    # 6.1: Gene fest auf 100 %. Das Level waehlt der Aufrufer ueber
+    # pick_foe_level() - hier wird nichts mehr abgefangen.
+    return Combatant(dex, level, genes=(100, 100, 100))
+
+
+# 5.5: der Rivale kaempft immer auf Spielerlevel + 2, gedeckelt bei 100.
+def rival_level(player_level):
+    return min(player_level + 2, 100)
+
+
+def make_rival(dex, level, genes=(100, 100, 100), grudge=False):
+    """Wie fighterFromRival() in battle.cpp: eigene Gene, kein Training,
+    Groll +10 % ATK. Die Attacken kommen hier immer aus dem Learnset seines
+    Levels - die Firmware nimmt die gespeicherten des Snapshots, sobald es
+    einen gibt. Fuer den Startwert Glumanda ist beides dasselbe."""
+    return Combatant(dex, level, genes=genes, grudge=grudge)
+
+
+def pick_rival(player_level, rng, rival_dex, grudge):
+    """rival_dex > 0: feste Spezies mit Genen 100 (Startwert ist 4).
+    rival_dex == 0: ein frueheres eigenes Pokemon - zufaellige Spezies mit
+    Genen wie beim Schluepfen, so wie snapshotRival() sie mitnimmt."""
+    lv = rival_level(player_level)
+    if rival_dex:
+        return make_rival(rival_dex, lv, grudge=grudge)
+    genes = tuple(90 + rng.randrange(21) for _ in range(3))
+    return make_rival(rng.choice(WILD_POOL), lv, genes, grudge)
 
 
 def simulate(n, level, rng, bond=0, energy=100, berry=False,
              player_ai=AI_ELITE, foe_ai=AI_WILD, player_dex=None,
-             foe_dex=None, spread=0):
+             foe_dex=None, spread=0, rival_dex=None, grudge=False):
     """spread 0 = gleichstufige Gegner, wie die Abnahme aus Phase 10 es
     verlangt. spread 2 ist die echte Begegnung aus 6.3.
 
     Die Vorgaben fuer player_ai und foe_ai sind absichtlich dieselben wie die
     der CLI (--player-ai elite, --ai wild). Wichen sie ab, liefert ein Aufruf
     ohne Argumente eine andere Quote als der dokumentierte Standardlauf - und
-    genau so entstehen Referenzzahlen, die nicht zu BSIM passen."""
+    genau so entstehen Referenzzahlen, die nicht zu BSIM passen.
+
+    rival_dex None = wilde Gegner. Sonst kaempft der Rivale nach 5.5 auf
+    Spielerlevel + 2, mit der Elite-KI aus 6.6 - foe_ai gilt dann nicht."""
     tally = {'win': 0, 'loss': 0, 'draw': 0}
     rounds_total = 0
     timeouts = 0
@@ -578,8 +605,13 @@ def simulate(n, level, rng, bond=0, energy=100, berry=False,
         pdex = player_dex or rng.choice(WILD_POOL)
         fdex = foe_dex or rng.choice(WILD_POOL)
         player = make_player(pdex, level, rng, bond, energy, berry)
-        foe = make_foe(fdex, pick_foe_level(level, rng, spread))
-        result, rnds = run_battle(player, foe, rng, player_ai, foe_ai)
+        if rival_dex is None:
+            foe = make_foe(fdex, pick_foe_level(level, rng, spread))
+            ai = foe_ai
+        else:
+            foe = pick_rival(level, rng, rival_dex, grudge)
+            ai = AI_ELITE   # 6.6: Rivale = staerkste Attacke
+        result, rnds = run_battle(player, foe, rng, player_ai, ai)
         tally[result] += 1
         rounds_total += rnds
         if rnds >= MAX_ROUNDS:
@@ -706,10 +738,21 @@ def self_test():
     saved.endure_left = 0
     assert not _survives(saved, rng, None), 'nur 1x pro Kampf'
 
-    # Der Rivalen-Groll gibt +10 % ATK
-    plain = Combatant(4, 25)
-    angry = Combatant(4, 25, grudge=True)
-    assert angry.atk == plain.atk * 110 // 100
+    # 5.5: Rivale. Groll +10 % ATK, eigene Gene, Level Spieler + 2
+    plain = make_rival(4, 25)
+    angry = make_rival(4, 25, grudge=True)
+    assert angry.atk == plain.atk * 110 // 100, 'Groll'
+    assert angry.dfn == plain.dfn and angry.spe == plain.spe, 'nur ATK'
+    assert make_foe(4, 25).atk == plain.atk, 'Gene 100 wie wild'
+    strong = make_rival(4, 25, genes=(110, 90, 100))
+    base_hp, base_atk, base_def, _ = BASE_STATS[4]
+    assert strong.atk == base_atk * 110 // 100 + 25, 'Gen ATK'
+    assert strong.dfn == base_def * 90 // 100 + 25, 'Gen DEF'
+    assert strong.max_hp == (base_hp * 2 + 110) * 25 // 100 + 25 + 10
+    assert rival_level(25) == 27 and rival_level(99) == 100
+    rng = random.Random(5)
+    assert pick_rival(10, rng, 4, False).dex == 4
+    assert pick_rival(10, rng, 0, False).level == 12
 
     # Ein Kampf laeuft durch und endet mit gueltigem Ergebnis
     rng = random.Random(7)
@@ -761,6 +804,12 @@ def main(argv=None):
     ap.add_argument('--spread', type=int, default=0,
                     help='Gegnerlevel Spielerlevel +/- N (0 = gleichstufig, '
                          '2 = Begegnung nach 6.3)')
+    ap.add_argument('--rival', type=int, default=None, metavar='DEX',
+                    help='gegen den Rivalen kaempfen (5.5): DEX fest mit '
+                         'Genen 100, 4 = Startwert Glumanda, 0 = zufaelliges '
+                         'frueheres Pokemon. Level Spieler+2, Elite-KI')
+    ap.add_argument('--grudge', action='store_true',
+                    help='Rivale ist weggelaufen: +10 %% ATK')
     ap.add_argument('--verbose', action='store_true',
                     help='einen einzelnen Kampf mitschreiben')
     ap.add_argument('--self-test', action='store_true')
@@ -791,14 +840,21 @@ def main(argv=None):
     tally, rounds_total, timeouts = simulate(
         args.n, args.level, rng, bond=args.bond, energy=args.energy,
         berry=args.berry, player_ai=args.player_ai, foe_ai=args.ai,
-        player_dex=args.player_dex, foe_dex=args.foe_dex, spread=args.spread)
+        player_dex=args.player_dex, foe_dex=args.foe_dex, spread=args.spread,
+        rival_dex=args.rival, grudge=args.grudge)
 
     n = args.n
-    low, high = foe_level_range(args.level, args.spread)
-    scope = ('gleichstufig' if low == high == args.level
-             else 'Gegnerlevel %d-%d' % (low, high))
-    print('%d Kaempfe, Level %d, %s (KI: %s)'
-          % (n, args.level, scope, args.ai))
+    if args.rival is not None:
+        who = ('Dex %d' % args.rival) if args.rival else 'zufaelliger Snapshot'
+        print('%d Kaempfe, Level %d gegen Rivale %s auf Lv %d%s (KI: elite)'
+              % (n, args.level, who, rival_level(args.level),
+                 ', Groll' if args.grudge else ''))
+    else:
+        low, high = foe_level_range(args.level, args.spread)
+        scope = ('gleichstufig' if low == high == args.level
+                 else 'Gegnerlevel %d-%d' % (low, high))
+        print('%d Kaempfe, Level %d, %s (KI: %s)'
+              % (n, args.level, scope, args.ai))
     print('Siege       %5d   %s' % (tally['win'], _fmt(tally['win'], n)))
     print('Niederlagen %5d   %s' % (tally['loss'], _fmt(tally['loss'], n)))
     print('Unentsch.   %5d   %s' % (tally['draw'], _fmt(tally['draw'], n)))
@@ -806,6 +862,8 @@ def main(argv=None):
     print('Runden      %5d.%d im Schnitt, %s am Zeitlimit'
           % (avg10 // 10, avg10 % 10, _fmt(timeouts, n)))
 
+    if args.rival is not None:
+        return 0    # Rivale: messen und melden, keine Abnahmegrenze
     rate = _pct10(tally['win'], n)
     ok = 450 <= rate <= 650
     print('Abnahme 45-65 %%: %s' % ('OK' if ok else 'VERFEHLT'))

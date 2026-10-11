@@ -28,6 +28,20 @@
 // ceremonias de fin de ciclo
 enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };
 
+// 5.5: der Rivale. Ein Snapshot des letzten Pokemon, das gegangen ist -
+// egal auf welchem Weg. Gehoert dem Spieler, nicht dem Individuum, und
+// liegt deshalb als eigener Block unter einem eigenen NVS-Schluessel.
+// moves[0] == 0 heisst: Attacken aus dem Learnset seines Levels.
+struct Rival {
+  uint16_t dex;
+  uint8_t geneAtk, geneDef, geneSpe;
+  char nick[12];
+  bool shiny;
+  uint8_t endKind;  // CER_FAREWELL / CER_RELEASE / CER_RUNAWAY
+  uint8_t moves[4];
+  bool set;         // false = Startwert Glumanda
+};
+
 enum PetMood : uint8_t { MOOD_HAPPY, MOOD_SAD, MOOD_EATING, MOOD_SLEEPING };
 
 // medallas del individuo (bitmask)
@@ -89,6 +103,10 @@ public:
   uint8_t pp[4] = { 0 };
   uint16_t battlesWon = 0, battlesLost = 0;
   uint8_t lossStreak = 0;    // Mitleidsstaffelung, siehe 6.7
+  Rival rival = { 4, 100, 100, 100, "", false, CER_FAREWELL, { 0 }, false };
+  // 5.5: Tag des letzten Rivalenkampfs, als today()+1 gespeichert. So heisst
+  // 0 "nie" - auch ohne Uhr, wo today() selbst 0 ist.
+  uint32_t rivalDay = 0;
   uint8_t nvsVer = NVS_VER;  // Schemaversion, siehe migrate() in pet.cpp
 
   // 4.2: xpMinutes zaehlt pro Spielminute um 1 hoch und STOPPT bei
@@ -100,7 +118,17 @@ public:
   }
 
   void levelUp();               // 4.2: nach gewonnenem Levelkampf
-  void addBattleXp(uint8_t foeLevel);  // 4.3: XP aus freiem Kampf
+  // 4.3: XP aus freiem Kampf. rival verdoppelt sie (5.5).
+  void addBattleXp(uint8_t foeLevel, bool rival = false);
+  // 5.5: einmal pro echtem Kalendertag. markRivalFought() beim Kampfstart,
+  // damit Flucht und Niederlage den Tag ebenfalls verbrauchen.
+  bool rivalReady() const { return rivalDay != today() + 1; }
+  void markRivalFought();
+  void setRival(uint16_t dex, uint8_t endKind);  // Konsole: RIVAL <dex>
+  uint8_t rivalLevel() const {  // 5.5: immer Spielerlevel + 2
+    uint16_t l = level() + 2;
+    return l > LEVEL_CAP ? LEVEL_CAP : (uint8_t)l;
+  }
   void migrate();               // 5.4: NVS-Schema hochziehen
   void setLevel(uint8_t lv);    // Testhilfe fuer den LVL-Konsolenbefehl
   // Testhilfen fuer BOND und ENE auf der Konsole. save() ist privat, deshalb
@@ -270,6 +298,7 @@ private:
   void registerCare();   // primer cuidado del dia: racha + vinculo
   void addBond(uint8_t amt);
   void checkMedals(bool shinyWin = false);
+  void snapshotRival(uint8_t endKind);  // 5.5: bei allen drei Enden
   void tick();
   void hatch();
   void registerSpecies(int16_t dex);

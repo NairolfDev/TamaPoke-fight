@@ -86,9 +86,12 @@ uint16_t battleMaxHp(uint8_t baseHp, uint8_t geneAtk, uint8_t level);
 void fighterFromPet(Fighter &f, const Pet &p);
 
 // 6.1: Gegner mit Genen fest auf 100 %, Attacken aus dem Learnset seines
-// Levels. grudge = weggelaufener Rivale, +10 % ATK (5.5).
-void fighterFromDex(Fighter &f, uint16_t dex, uint8_t level, bool shiny,
-                    bool grudge);
+// Levels.
+void fighterFromDex(Fighter &f, uint16_t dex, uint8_t level, bool shiny);
+
+// 5.5: der Rivale mit seinen eigenen Genen und Attacken. Weggelaufene
+// (endKind CER_RUNAWAY) bekommen +10 % ATK - der Groll.
+void fighterFromRival(Fighter &f, const Rival &r, uint8_t level);
 
 // 6.3: Gegnerlevel Spielerlevel +/- spread, Spanne schrumpft am Boden.
 void foeLevelRange(uint8_t playerLevel, uint8_t spread, uint8_t *low,

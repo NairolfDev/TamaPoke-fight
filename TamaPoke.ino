@@ -374,7 +374,7 @@ static void simPlayer(Fighter &f, uint16_t dex, uint8_t level) {
   uint8_t gAtk = 90 + random(21);
   uint8_t gDef = 90 + random(21);
   uint8_t gSpe = 90 + random(21);
-  fighterFromDex(f, dex, level, false, false);
+  fighterFromDex(f, dex, level, false);
   const DexEntry &de = DEX_TBL[dex];
   // calcStat() aus pet.cpp: base * gene / 100 + level + Training (hier 0)
   f.atk = (uint16_t)((uint32_t)de.bAtk * gAtk / 100 + level);
@@ -389,6 +389,30 @@ static void simPlayer(Fighter &f, uint16_t dex, uint8_t level) {
 // BATTLE <dex>: ein Kampf des echten Pets gegen die Spezies, Runde fuer Runde
 // mitgeschrieben. Wendet noch KEINE Kosten und Belohnungen aus 6.7 an - das
 // gehoert in die UI-Phase.
+// 5.5: zeigt den Rivalenslot und seine Kampfwerte auf Spielerlevel + 2.
+// Veraendert nichts - der Kampf selbst laeuft ueber die Engine wie jeder
+// andere, gemessen wird er im Simulator (battle_sim.py --rival).
+void rivalCmd() {
+  const Rival &r = pet.rival;
+  Serial.printf("rivale %s%s #%u %s nick=%s gene=%u/%u/%u ende=%s\n",
+                r.set ? "" : "(startwert) ", DEX_TBL[r.dex].name, r.dex,
+                r.shiny ? "SHINY" : "", r.nick, r.geneAtk, r.geneDef,
+                r.geneSpe,
+                r.endKind == CER_RUNAWAY ? "weggelaufen (+10% ATK)"
+                : r.endKind == CER_RELEASE ? "freigelassen" : "abschied");
+  if (!pet.isEgg()) {
+    Fighter fo;
+    fighterFromRival(fo, r, pet.rivalLevel());
+    Serial.printf("kampf Lv%u hp=%u atk=%u def=%u spe=%u attacken:",
+                  fo.level, fo.maxHp, fo.atk, fo.def, fo.spe);
+    for (uint8_t i = 0; i < fo.moveCount; i++)
+      Serial.printf(" %s", moveName(fo.moves[i]));
+    Serial.println();
+  }
+  Serial.printf("heute bereit=%d\n", pet.rivalReady());
+  Serial.println("DONE");
+}
+
 void battleCmd(uint16_t dex) {
   if (dex < 1 || dex > DEX_COUNT) {
     Serial.println("ERR dex ausserhalb des Bereichs");
@@ -403,7 +427,7 @@ void battleCmd(uint16_t dex) {
   Fighter pl, fo;
   fighterFromPet(pl, pet);
   bool shiny = random(64) == 0;  // 6.3: Shiny-Gegner 1 zu 64
-  fighterFromDex(fo, dex, pickFoeLevel(pl.level, 2), shiny, false);
+  fighterFromDex(fo, dex, pickFoeLevel(pl.level, 2), shiny);
   Serial.printf("%s Lv%u (%u HP, atk=%u def=%u spe=%u) vs %s Lv%u (%u HP)%s\n",
                 DEX_TBL[pl.dex].name, pl.level, pl.maxHp, pl.atk, pl.def,
                 pl.spe, DEX_TBL[fo.dex].name, fo.level, fo.maxHp,
@@ -466,7 +490,7 @@ void bsimCmd(uint16_t n, uint8_t level) {
   for (uint16_t i = 0; i < n; i++) {
     Fighter pl, fo;
     simPlayer(pl, pickWildDex(-1), level);
-    fighterFromDex(fo, pickWildDex(-1), level, false, false);
+    fighterFromDex(fo, pickWildDex(-1), level, false);
     uint8_t rounds = 0;
     uint8_t res = battleRun(pl, fo, AI_ELITE, AI_WILD, &rounds);
     if (res == BR_WIN) win++;
@@ -622,6 +646,22 @@ void handleSerial() {
     else
       Serial.println("gegner wieder zufaellig");
     Serial.println("DONE");
+  } else if (line == "RIVAL") {
+    rivalCmd();
+  } else if (line.startsWith("RIVAL ")) {
+    // RIVAL <dex> [1]: Slot belegen, 1 = weggelaufen (Groll). Gibt den
+    // Tag frei, damit sich der Kampf gleich danach testen laesst.
+    String rest = line.substring(6);
+    int sp = rest.indexOf(' ');
+    int d = (sp < 0 ? rest : rest.substring(0, sp)).toInt();
+    bool grudge = sp >= 0 && rest.substring(sp + 1).toInt() != 0;
+    if (d >= 1 && d <= DEX_COUNT) {
+      pet.setRival((uint16_t)d, grudge ? CER_RUNAWAY : CER_FAREWELL);
+      rivalCmd();
+    } else {
+      Serial.println("ERR dex ausserhalb des Bereichs");
+      Serial.println("DONE");
+    }
   } else if (line.startsWith("BATTLE ")) {
     battleCmd((uint16_t)line.substring(7).toInt());
   } else if (line.startsWith("BSIM ")) {
@@ -1290,7 +1330,7 @@ void startBattle() {
   }
 
   fighterFromPet(btPl, pet);
-  fighterFromDex(btFo, dex, pickFoeLevel(btPl.level, 2), shiny, false);
+  fighterFromDex(btFo, dex, pickFoeLevel(btPl.level, 2), shiny);
 
   // CLAUDE.md: vor dem Laden eines neuen Sprite-Slots das PSRAM pruefen.
   // Ein PMD-Sprite kostet bis zu ~220 KB; ohne Reserve lieber ohne Bild

@@ -210,6 +210,38 @@ Eintrag in jeder Sprache exakt seinen alten Text behält
 - Verrutscht wäre sichtbar als Text, der zum Feld davor oder danach gehört —
   etwa `SPRACHE` dort, wo `MIN` stehen sollte.
 
+## A11. Rivale: Slot, Snapshot, Konsole
+
+Phase 6 (§5.5). Der Rivale liegt als ein Block unter dem NVS-Schlüssel
+`rival`, dazu `rivday` für den Tag des letzten Rivalenkampfs.
+
+**Startwert.** Auf einem Gerät mit Altdaten gibt es den Schlüssel noch nicht:
+
+1. `RIVAL` → `rivale (startwert) Glumanda #4 … gene=100/100/100 ende=abschied`,
+   darunter die Kampfwerte auf **Spielerlevel + 2** und `heute bereit=1`.
+
+**Konsole.**
+
+2. `RIVAL 25` → Slot ist Pikachu, Gene 100, `ende=abschied`.
+3. `RIVAL 25 1` → `ende=weggelaufen (+10% ATK)`. Die `atk=` in der
+   Kampfzeile muss um 10 % über der aus Schritt 2 liegen, `def=`/`spe=` gleich.
+4. Neustart (Port neu öffnen), `RIVAL` → Pikachu mit Groll ist noch da.
+
+**Snapshot bei allen drei Enden.** Jedes Ende verbraucht das aktuelle Pokémon
+— das gehört ans Ende der Testsitzung oder auf ein entbehrliches Pokémon.
+Vorher `STATS` notieren (Spezies, Gene, Spitzname, Shiny).
+
+5. `BYE` (Abschied), Zeremonie abwarten, `RIVAL` → das gegangene Pokémon in
+   seiner aktuellen Form, mit seinen Genen, seinem Spitznamen und seinen
+   Attacken, `ende=abschied`.
+6. Nach dem nächsten Schlüpfen: Freilassen über langen Druck + `JA` →
+   `RIVAL` zeigt es mit `ende=freigelassen`.
+7. Nach dem nächsten Schlüpfen: `ABANDON`, dann den Weglauf-Knopf (oder
+   `RUN`) → `ende=weggelaufen (+10% ATK)`.
+
+Der Kampf gegen den Rivalen selbst (einmal pro Kalendertag, doppelte XP) hat
+noch keinen Einstieg in der UI — siehe B6, die Prüfschritte kommen dort dazu.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft

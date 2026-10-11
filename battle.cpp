@@ -82,8 +82,7 @@ void fighterFromPet(Fighter &f, const Pet &p) {
   fighterClearBattleState(f);
 }
 
-void fighterFromDex(Fighter &f, uint16_t dex, uint8_t level, bool shiny,
-                    bool grudge) {
+void fighterFromDex(Fighter &f, uint16_t dex, uint8_t level, bool shiny) {
   if (dex < 1 || dex > DEX_COUNT) dex = 1;
   if (level < 1) level = 1;
   const DexEntry &de = DEX_TBL[dex];
@@ -91,12 +90,11 @@ void fighterFromDex(Fighter &f, uint16_t dex, uint8_t level, bool shiny,
   f.level = level;
   f.type1 = de.type1;
   f.type2 = de.type2;
-  // 6.1: Gene fest auf 100 %, ausser beim Rivalen
+  // 6.1: Gene fest auf 100 %. Der Rivale hat seinen eigenen Aufbau.
   f.maxHp = battleMaxHp(de.bHp, 100, level);
   f.atk = (uint16_t)de.bAtk + level;
   f.def = (uint16_t)de.bDef + level;
   f.spe = (uint16_t)de.bSpe + level;
-  if (grudge) f.atk = (uint16_t)((uint32_t)f.atk * 110 / 100);  // 5.5: Groll
   f.moveCount = movesForLevel(dex, level, f.moves);
   for (uint8_t i = 0; i < MOVE_SLOTS; i++)
     f.pp[i] = i < f.moveCount ? MOVE_TBL[f.moves[i]].maxPp : 0;
@@ -106,8 +104,33 @@ void fighterFromDex(Fighter &f, uint16_t dex, uint8_t level, bool shiny,
   f.exhausted = false;
   f.isPlayer = false;
   f.shiny = shiny;
-  f.isRival = grudge;
+  f.isRival = false;
   fighterClearBattleState(f);
+}
+
+void fighterFromRival(Fighter &f, const Rival &r, uint8_t level) {
+  fighterFromDex(f, r.dex, level, r.shiny);
+  const DexEntry &de = DEX_TBL[f.dex];
+  // Werte wie calcStat() beim Spieler, nur ohne Training: base * gene /
+  // 100 + level. Ein HP-Gen gibt es nicht, geneAtk wird mitbenutzt (6.2).
+  f.maxHp = battleMaxHp(de.bHp, r.geneAtk, f.level);
+  f.atk = (uint16_t)de.bAtk * r.geneAtk / 100 + f.level;
+  f.def = (uint16_t)de.bDef * r.geneDef / 100 + f.level;
+  f.spe = (uint16_t)de.bSpe * r.geneSpe / 100 + f.level;
+  if (r.endKind == CER_RUNAWAY)
+    f.atk = (uint16_t)((uint32_t)f.atk * 110 / 100);  // 5.5: Groll
+  // Seine eigenen Attacken, falls gespeichert - sonst bleibt das Learnset
+  // seines Levels aus fighterFromDex() stehen (Startwert Glumanda).
+  if (r.moves[0]) {
+    f.moveCount = 0;
+    for (uint8_t i = 0; i < MOVE_SLOTS; i++) {
+      f.moves[i] = r.moves[i];
+      f.pp[i] = r.moves[i] ? MOVE_TBL[r.moves[i]].maxPp : 0;
+      if (r.moves[i]) f.moveCount = i + 1;
+    }
+  }
+  f.hp = f.maxHp;
+  f.isRival = true;
 }
 
 // 6.3: die Spanne schrumpft am Boden, statt unten abgeschnitten zu werden.

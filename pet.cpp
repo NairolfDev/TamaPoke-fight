@@ -374,6 +374,7 @@ bool Pet::canRunawayNow() const {
 
 void Pet::startFarewell() {
   if (isEgg() || ceremony != CER_NONE) return;
+  snapshotRival(CER_FAREWELL);
   lastEnd = CER_FAREWELL;
   ceremony = CER_FAREWELL;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -384,6 +385,7 @@ void Pet::startFarewell() {
 
 void Pet::startRunaway() {
   if (isEgg() || ceremony != CER_NONE) return;
+  snapshotRival(CER_RUNAWAY);
   lastEnd = CER_RUNAWAY;
   ceremony = CER_RUNAWAY;
   ceremonyUntil = millis() + CEREMONY_MS;
@@ -393,11 +395,47 @@ void Pet::startRunaway() {
 
 void Pet::release() {
   if (isEgg() || ceremony != CER_NONE) return;
+  snapshotRival(CER_RELEASE);
   lastEnd = CER_RELEASE;
   ceremony = CER_RELEASE;
   ceremonyUntil = millis() + CEREMONY_MS;
   heartUntil = ceremonyUntil;
   sfxPlay(SFX_BYE);
+  save();
+}
+
+// 5.5: das scheidende Pokemon wird zum Rivalen, in seiner aktuellen Form,
+// mit Genen, Namen, Shiny-Status und Attacken. Trainingspunkte gehen nicht
+// mit - der Rivale-Block der Spec hat dafuer kein Feld.
+void Pet::snapshotRival(uint8_t endKind) {
+  rival.dex = (uint16_t)speciesId;
+  rival.geneAtk = geneAtk;
+  rival.geneDef = geneDef;
+  rival.geneSpe = geneSpe;
+  memcpy(rival.nick, nick, sizeof(rival.nick));
+  rival.nick[sizeof(rival.nick) - 1] = 0;
+  rival.shiny = shiny;
+  rival.endKind = endKind;
+  memcpy(rival.moves, moves, sizeof(rival.moves));
+  rival.set = true;
+}
+
+void Pet::markRivalFought() {
+  rivalDay = today() + 1;
+  save();
+}
+
+// Testhilfe: Rivalenslot direkt belegen, Gene 100, Learnset-Attacken, und
+// den Tag freigeben. endKind CER_RUNAWAY schaltet den Groll an.
+void Pet::setRival(uint16_t dex, uint8_t endKind) {
+  rival.dex = dex;
+  rival.geneAtk = rival.geneDef = rival.geneSpe = 100;
+  rival.nick[0] = 0;
+  rival.shiny = false;
+  rival.endKind = endKind;
+  memset(rival.moves, 0, sizeof(rival.moves));
+  rival.set = true;
+  rivalDay = 0;
   save();
 }
 
@@ -573,9 +611,10 @@ void Pet::levelUp() {
 // 4.3: XP eines freien Kampfes. Ist eine Stufe offen, gibt es keine XP -
 // der naechste Sieg IST der Aufstieg, dafuer braucht die UI keinen
 // Moduswechsel.
-void Pet::addBattleXp(uint8_t foeLevel) {
+void Pet::addBattleXp(uint8_t foeLevel, bool rival) {
   if (isEgg() || levelPending() || level() >= LEVEL_CAP) return;
   uint16_t gain = xpGainFor(foeLevel);
+  if (rival) gain *= 2;  // 5.5: doppelte XP, rivalDay haelt das im Rahmen
   uint16_t need = lvlReq();
   uint32_t v = xpMinutes + gain;
   xpMinutes = v > need ? need : (uint32_t)v;  // friert bei lvlReq() ein
@@ -772,6 +811,10 @@ void Pet::save() {
   // Neustart zwischen Aufstieg und Lerndialog die Attacke endgueltig -
   // das Level steigt kein zweites Mal.
   prefs.putUChar("pendmv", pendingMove);
+  // 5.5: der Rivale als ein Block. Passt die Groesse beim Laden nicht,
+  // gilt der Startwert - ein altes oder kaputtes Blob wird so nie gelesen.
+  prefs.putBytes("rival", &rival, sizeof(rival));
+  prefs.putUInt("rivday", rivalDay);
   prefs.putUChar("nvs", nvsVer);
 }
 
@@ -834,6 +877,9 @@ void Pet::load() {
   battlesLost = prefs.getUShort("blost", 0);
   lossStreak = prefs.getUChar("lstrk", 0);
   pendingMove = prefs.getUChar("pendmv", 0);
+  if (prefs.getBytesLength("rival") == sizeof(rival))
+    prefs.getBytes("rival", &rival, sizeof(rival));
+  rivalDay = prefs.getUInt("rivday", 0);
   nvsVer = prefs.getUChar("nvs", 1);
   // siembra: la mascota actual cuenta como criada (guardados antiguos)
   if (speciesId >= 1) registerSpecies(speciesId);
