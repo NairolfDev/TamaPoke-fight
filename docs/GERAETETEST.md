@@ -326,12 +326,23 @@ Levels, Untergrenze 1. Ein Sieg setzt zurück.
 
 Nacharbeit. Nichts davon ist neu, aber auch nichts davon ist abgehakt.
 
-## B1. Hat mein Pokémon den Phase-5-Flash überlebt?
+## B1. Der Spielstand überlebt einen Flash
 
-Offener Punkt, den nur du beantworten kannst. Wenn ja: die Migration 1 → 2 hat
-funktioniert und dieser Abschnitt ist abgehakt. Wenn nein, gehört hierher, was
-genau verloren war — dann steckt in `migrate()` (`pet.cpp:634`) ein Fehler, der
-gefunden werden muss, bevor je wieder ein Schema geändert wird.
+**Geklärt (2026-10-12):** das Pokémon ging beim Phase-5-Flash verloren, weil das
+16-MB-Vollabbild `merged.bin` ab `0x0` geschrieben wurde. Es enthält an der
+Stelle der NVS-Partition nur `0xFF` — der Flash hat den Spielstand gelöscht,
+`migrate()` kam gar nicht zum Zug. Die Migration 1 → 2 ist damit am Gerät
+**nie** mit echten Altdaten gelaufen.
+
+`flash.bat` schreibt seitdem nur die Teile aus `flash_args` und prüft vorher
+mit `tools/check_flash.py`, dass NVS unberührt bleibt.
+
+Prüfung beim nächsten Flash:
+
+1. Vorher `STATS` notieren — Spezies, Level, Gene, Spitzname, Medaillen.
+2. Mit `flash.bat` flashen. Die Ausgabe muss
+   `sicher: kein Teil beruehrt den Spielstand (NVS)` zeigen.
+3. Nach dem Neustart `STATS`: **alles gleich**, keine Starterauswahl.
 
 `STATS` zeigt den heutigen Stand: Spezies, Level, Gene, Bindung, Streak,
 Medaillen, Spitzname.

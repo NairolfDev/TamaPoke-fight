@@ -123,13 +123,21 @@ zum Kopieren zu geben.
 
 Port ist `COM3`, nicht `/dev/ttyACM0`. Geflasht wird mit `flash.bat` im
 Repo-Ordner — sie fragt nach dem Port (`COM3` oder nur `3`), zeigt den Hash
-des Abbilds, warnt bei `-dirty` und schreibt das 16-MB-Vollabbild
-`build\battle\TamaPoke.ino.merged.bin` mit `esptool` an `0x0`:
+des Abbilds, warnt bei `-dirty` und schreibt mit `esptool` genau die Teile
+aus `build\battle\flash_args` (Bootloader 0x0, Partitionen 0x8000,
+`boot_app0` 0xE000, App 0x10000) — **den Spielstand fasst sie nicht an**:
 
 ```
 flash.bat
 flash.bat COM3
 ```
+
+**Nie das Vollabbild `merged.bin` ab `0x0` flashen.** Es ist 16 MB groß und
+enthält an der Stelle der NVS-Partition (0x9000–0xE000) nur `0xFF` — jeder
+solche Flash ist ein unsichtbares `WIPE`. Genau so ging beim Flash von
+Phase 5 das Pokémon verloren; nicht `migrate()`, sondern der Flash-Befehl war
+schuld. `tools/check_flash.py` rechnet vor jedem Flash nach, dass kein Teil
+NVS berührt, und `flash.bat` bricht sonst ab.
 
 **Nie `arduino-cli upload --input-dir` ohne Sketch-Pfad.** Das hat einmal gar
 nichts geschrieben, und eine Stunde lang wurde die Werksdemo debuggt.
