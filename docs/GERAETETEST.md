@@ -427,7 +427,8 @@ mit `tools/check_flash.py`, dass NVS unberührt bleibt.
 Prüfung beim nächsten Flash:
 
 1. Vorher `STATS` notieren — Spezies, Level, Gene, Spitzname, Medaillen.
-2. Mit `flash.bat` flashen. Die Ausgabe muss
+2. Mit `.lash.bat COM3` flashen (in PowerShell mit `.\`, oder per
+   Doppelklick). Die Ausgabe muss
    `sicher: kein Teil beruehrt den Spielstand (NVS)` zeigen.
 3. Nach dem Neustart `STATS`: **alles gleich**, keine Starterauswahl.
 

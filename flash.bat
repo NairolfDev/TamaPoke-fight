@@ -89,14 +89,19 @@ echo.
 echo Fertig. Der Spielstand ist unangetastet.
 echo Nach dem Neustart zeigt die Bootzeile:  TamaPoke fw v1.5 ^(!HASH!^)
 echo Der Port kann sich dabei neu anmelden - arduino-cli board list.
-endlocal
-exit /b 0
+set "RC=0"
+goto done
 
 :abort
 echo Abgebrochen, nichts geflasht.
-endlocal
-exit /b 1
+set "RC=1"
+goto done
 
 :fail
-endlocal
-exit /b 1
+set "RC=1"
+
+:done
+rem Per Doppelklick gestartet? Dann schliesst sich das Fenster sonst sofort,
+rem und man sieht weder Erfolg noch Fehler. Aus einer offenen Konsole nicht.
+echo %CMDCMDLINE% | findstr /i /c:"%~nx0" >nul && pause
+endlocal & exit /b %RC%

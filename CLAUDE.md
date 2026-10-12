@@ -143,9 +143,13 @@ aus `build\battle\flash_args` (Bootloader 0x0, Partitionen 0x8000,
 `boot_app0` 0xE000, App 0x10000) — **den Spielstand fasst sie nicht an**:
 
 ```
-flash.bat
-flash.bat COM3
+.\flash.bat
+.\flash.bat COM3
 ```
+
+In PowerShell **mit `.\` davor** — ohne führt PowerShell keine Datei aus dem
+aktuellen Ordner aus („is not recognized"). In `cmd` geht `flash.bat`, im
+Explorer ein Doppelklick; dann wartet das Fenster am Ende auf eine Taste.
 
 **Nie das Vollabbild `merged.bin` ab `0x0` flashen.** Es ist 16 MB groß und
 enthält an der Stelle der NVS-Partition (0x9000–0xE000) nur `0xFF` — jeder
