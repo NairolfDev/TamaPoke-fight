@@ -547,6 +547,58 @@ void bsimCmd(uint16_t n, uint8_t level) {
   Serial.println("DONE");
 }
 
+// E1/E2: HEAP <n> haertet die Wege, die Speicher kosten koennten. Jeder
+// Durchgang ist ein Kampf - reihum wild, Rivale, Arenagegner - und laedt und
+// entlaedt dabei den Gegner-Sprite aus dem PSRAM wie ein echter Kampf. Alle
+// 50 Durchgaenge werden Heap und PSRAM ausgegeben: beide muessen nach dem
+// ersten Block stehen bleiben. Kaempft mit Kopien, das Pet bleibt unberuehrt.
+void heapCmd(uint16_t n) {
+  if (n == 0 || pet.isEgg() || battleOpen) {
+    Serial.println("ERR n=0, Ei oder Kampf offen");
+    Serial.println("DONE");
+    return;
+  }
+  uint32_t heap0 = ESP.getFreeHeap();
+  uint32_t ps0 = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+  Serial.printf("start heap=%u psram=%u\n", (unsigned)heap0, (unsigned)ps0);
+  // Bezug ist das Ende des ersten 50er-Blocks: dort hat das SD-Dateisystem
+  // seine einmaligen Puffer angelegt. Bei n <= 50 bleibt es der Start.
+  uint32_t heapRef = heap0, psRef = ps0;
+  for (uint16_t i = 0; i < n; i++) {
+    Fighter pl, fo;
+    fighterFromPet(pl, pet);
+    uint8_t kind = i % 3, ai = AI_WILD;
+    if (kind == 0) {
+      fighterFromDex(fo, pickWildDex(-1), pl.level, false);
+    } else if (kind == 1) {
+      fighterFromRival(fo, pet.rival, pet.rivalLevel());
+      ai = RIVAL_AI;
+    } else {
+      uint8_t rank = 1 + (i / 3) % ARENA_RANKS;
+      arenaFoe(fo, rank, (i / 3) % 3, pl.level, 0);
+      ai = arenaFoeAi(rank);
+    }
+    foePmd.load((uint8_t)fo.dex, fo.shiny);  // wie btBegin()
+    battleRun(pl, fo, AI_ELITE, ai, nullptr);
+    foePmd.unload();                          // wie btClose()
+    if ((i + 1) % 50 == 0 || i + 1 == n)
+      Serial.printf("nach %u: heap=%u psram=%u min=%u\n", i + 1,
+                    ESP.getFreeHeap(),
+                    (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                    ESP.getMinFreeHeap());
+    if (i + 1 == 50 && n > 50) {
+      heapRef = ESP.getFreeHeap();
+      psRef = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+    }
+    if ((i & 0x0F) == 0x0F) delay(1);  // Watchdog
+  }
+  int32_t dh = (int32_t)ESP.getFreeHeap() - (int32_t)heapRef;
+  int32_t dp = (int32_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM) - (int32_t)psRef;
+  Serial.printf("drift ab 50: heap=%d psram=%d -> %s\n", (int)dh, (int)dp,
+                (dh == 0 && dp == 0) ? "KEIN LECK" : "PRUEFEN");
+  Serial.println("DONE");
+}
+
 // ---------- consola serie (provision de SD + depuracion) ----------
 
 void handleSerial() {
@@ -636,10 +688,11 @@ void handleSerial() {
     Serial.println();
     Serial.println("DONE");
   } else if (line == "HEALTH") {
-    Serial.printf("up=%lus heap=%u min=%u sd=%d mon=%d fw=%s/%s\n",
+    Serial.printf("up=%lus heap=%u min=%u psram=%u sd=%d mon=%d fw=%s/%s\n",
                   (unsigned long)(millis() / 1000), ESP.getFreeHeap(),
-                  ESP.getMinFreeHeap(), sdReady, pmd.loaded || mon.loaded,
-                  FW_VERSION, FW_GIT);
+                  ESP.getMinFreeHeap(),
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), sdReady,
+                  pmd.loaded || mon.loaded, FW_VERSION, FW_GIT);
     Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
@@ -674,6 +727,8 @@ void handleSerial() {
     else
       Serial.println("gegner wieder zufaellig");
     Serial.println("DONE");
+  } else if (line.startsWith("HEAP ")) {
+    heapCmd((uint16_t)line.substring(5).toInt());
   } else if (line == "ARENA") {
     arenaCmd();
   } else if (line.startsWith("ARENA ")) {

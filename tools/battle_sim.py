@@ -930,6 +930,27 @@ def self_test():
     dead = arena_dead_ends()
     assert not dead, 'Sackgassen (Rang, Gegner, Spieler, Lv): %s' % dead[:6]
 
+    # 6.5 Beere: unter 30 % HP, heilt die Haelfte der max. HP, einmal pro
+    # Kampf, nur mit entdeckter Lieblingsbeere. battleRun() in battle.cpp
+    # benutzt dieselbe Schwelle.
+    p = make_player(19, 25, random.Random(3), berry=True)
+    p.max_hp = 100
+    p.hp = 30
+    assert not _wants_berry(p), 'bei genau 30 % noch keine Beere'
+    p.hp = 29
+    assert _wants_berry(p)
+    p.hp = 25
+    start = p.hp
+    log = []
+    run_battle(p, make_foe(19, 25), random.Random(3), AI_ELITE, AI_WILD, log)
+    eaten = [l for l in log if 'BEERE' in l]
+    assert len(eaten) == 1, 'Beere genau einmal pro Kampf: %s' % eaten
+    assert eaten[0].strip() == 'BEERE: %d/%d' % (min(p.max_hp, start + p.max_hp // 2),
+                                                 p.max_hp), eaten[0]
+    q = make_player(19, 25, random.Random(3), berry=False)
+    q.hp = q.max_hp * 10 // 100
+    assert not _wants_berry(q), 'ohne entdeckte Beere keine Beere'
+
     # Ein Kampf laeuft durch und endet mit gueltigem Ergebnis
     rng = random.Random(7)
     res, rnds = run_battle(make_player(1, 25, rng), make_foe(4, 25), rng)

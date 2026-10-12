@@ -356,6 +356,22 @@ gleich breite Knöpfe. Größter Eckabstand weiter 173,8 px.
 14. Rang 8 schaffen (`ARENA 7`, drei Siege) → Medaille `ARENA RANG 8` mit
     Feier, `+5` Trainingspunkte, Arena-Knopf weg.
 
+## A17. Kein Speicherleck (Härtung)
+
+`HEAP <n>` spielt n Kämpfe reihum — wild, Rivale, Arenagegner — und lädt
+und entlädt dabei jedes Mal den Gegner-Sprite aus dem PSRAM wie ein echter
+Kampf. Das Pet bleibt unberührt.
+
+1. `HEAP 300` → Zeilen `nach 50`, `nach 100`, … mit `heap=` und `psram=`.
+2. Ab `nach 50` müssen beide Werte **stehen bleiben**. Der erste Block darf
+   abweichen: dort legt das SD-Dateisystem einmalig Puffer an.
+3. Letzte Zeile `drift ab 50: heap=0 psram=0 -> KEIN LECK`.
+4. Dazu drei echte Arenakämpfe hintereinander auf dem Bildschirm, einer
+   davon mit Flucht, zwischendurch `HEALTH`: `psram=` muss nach jedem
+   Kampf wieder auf dem Wert davor stehen.
+
+Ohne SD-Karte lädt kein Sprite; dann prüft `HEAP` nur den Heap.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft
@@ -456,18 +472,28 @@ dürfen **kein einziges Byte** gewandert sein. Die Engine allokiert nichts.
 - Der Tipp, der aufweckt, darf **nichts auslösen** (`swallowGesture`) —
   besonders nicht im Hinweisband und nicht auf einem Icon.
 - Neue Elemente gegen den Rand: Mittelpunkt (233,233), Radius 231.
-  Rechnerisch liegen alle drin, aber das AMOLED hat die letzte Stimme:
-  Jeweils der größte Eckabstand:
-  - Hinweisband (113,106)–(353,134) → **174,7** bei Ecke (353,106)
-  - Levelkampf-Leiste (143,56)–(323,74) → **198,6** bei (323,56)
-  - Kampfbutton Statuskarte (96,300)–(370,340) → **173,8** bei (370,340)
-  - Attackenbuttons und Fluchtbutton auf dem unteren Bogen
-  - `drawStreakBadge()` bei (26,16) → **299,9**, also 69 px **außerhalb**
-    Radius 231. Kann dort nicht sichtbar sein. Nachsehen, nicht anfassen.
+  Rechnerisch liegen alle drin, aber das AMOLED hat die letzte Stimme. Die
+  Rechtecke stammen aus den `#define`s und Zeichenaufrufen im Code:
+
+  | Element | Rechteck | größte Ecke | Luft |
+  |---|---|---|---|
+  | Medaillenraster S. 3, Reihe 1 | (48,100)–(418,132) | 227,8 bei (418,100) | **3,2** |
+  | Attackenreihe (Kampf) | (66,330)–(400,382) | 223,8 bei (400,382) | 7,2 |
+  | Medaillenraster S. 3, Reihe 6 | (48,300)–(228,332) | 209,8 bei (48,332) | 21,2 |
+  | Kopfleiste Levelkampf/Arena | (143,56)–(323,74) | 198,6 bei (323,56) | 32,4 |
+  | Beerenbutton (Kampf) | (183,388)–(283,418) | 191,6 bei (283,418) | 39,4 |
+  | Fluchtbutton (Kampf) | (300,296)–(400,324) | 190,2 bei (400,324) | 40,8 |
+  | Hinweisband | (113,106)–(353,134) | 174,7 bei (353,106) | 56,3 |
+  | Kampfknöpfe Statuskarte S. 1 | (96,300)–(370,340) | 173,8 bei (370,340) | 57,2 |
+  | Arenazeile S. 4 | (155,284)–(311,300) | 102,8 bei (311,300) | 128,2 |
+
+  Zuerst die obersten zwei Zeilen ansehen — dort ist die Luft am knappsten.
+- `drawStreakBadge()` bei (26,16) → **299,9**, also 69 px **außerhalb**
+  Radius 231. Kann dort nicht sichtbar sein. Nachsehen, nicht anfassen.
 
 ---
 
 ## Was hier nicht steht
 
-Phase 6 (Rivale), Phase 7 (Arena) und die Lieblingsbeere im Kampf sind noch
-nicht gebaut. Ihre Prüfschritte kommen dazu, sobald sie es sind.
+Nichts aus dem Kampfsystem ist mehr ungebaut. Was am Gerät nicht mehr
+geprüft werden muss, steht in `docs/BATTLE_SPEC.md` mit seiner Messung.
