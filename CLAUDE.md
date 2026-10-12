@@ -90,7 +90,15 @@ cmd /c mklink /J "C:\Users\oberh\Webseits\wt-phase3\TamaPoke" "C:\Users\oberh\We
 Gegenprobe nach jedem Build, bei dem es drauf ankommt: das geänderte Konstrukt im
 Binary suchen, nicht der Größenangabe glauben. Zwei Builds derselben Quelle
 unterscheiden sich um rund 65 Byte (Zeitstempel und Build-Pfade) — sieht ein Diff
-genau so aus, ist die Änderung *nicht* mitkompiliert worden.
+genau so aus, ist die Änderung *nicht* mitkompiliert worden. Hat die Änderung
+keinen String, den man suchen kann (eine Formel, ein Vergleich), liegt die
+übersetzte Quelle unter `build\battle\sketch\` — dort nach dem neuen Text suchen
+und prüfen, dass die `.o`-Datei frisch ist.
+
+**Arduino-Prototypen:** der Präprozessor ergänzt Prototypen für Funktionen,
+nicht für globale Variablen und `#define`s — die müssen vor ihrer ersten
+Verwendung stehen. Funktionen, die vor ihrer Definition benutzt werden,
+**nicht `static`** machen; darauf verlässt man sich besser nicht.
 
 ### Windows
 
@@ -110,7 +118,14 @@ auszuführen:
 Weitere PowerShell-Stolpersteine: `&&` und `||` gibt es in Windows PowerShell 5.1
 nicht (`;` oder `if ($?) { … }`), und `2>&1` auf eine native `.exe` verpackt jede
 stderr-Zeile in einen `NativeCommandError` — sieht nach Absturz aus, obwohl der
-Exitcode 0 ist.
+Exitcode 0 ist. Steht im Skript `$ErrorActionPreference = "Stop"`, wird daraus
+ein echter Abbruch; `build.ps1` schaltet deshalb vor `arduino-cli` zurück.
+
+- `Set-Location` ändert nicht das Arbeitsverzeichnis von `cmd /c` — eine
+  `.bat` aus PowerShell mit vollem Pfad aufrufen.
+- `(Get-Item <junction>).Target` ist ein `String[]`, kein String. Ein Vergleich
+  mit `-ne` liefert dann eine gefilterte Liste statt eines Boolean. `[0]` nehmen.
+- `.bat`-Dateien brauchen CRLF und nur ASCII, sonst springt `goto` unzuverlässig.
 
 **Keine überlangen Befehlszeilen zum Kopieren geben.** Die Konsole bricht eine
 eingefügte Zeile an der Fensterbreite um, und der Umbruch landet *im* String.
@@ -162,7 +177,9 @@ und bricht mit „no encuentro la placa" ab. Braucht `pip install pyserial`.
 `CLAUDE.md`. Ein mehrzeiliges Suchmuster mit `\n` greift deshalb nicht.
 
 Mehrzeilige Patches als Python-Skript**datei**, nicht als Heredoc: ein Heredoc
-zerbricht `\n`, und der Patch findet dann sein eigenes Muster nicht mehr. Das
+zerbricht `\n` — und Backslashes in Windows-Pfaden (`build\battle` wird zu
+`build` + Backspace + `attle`) —, und der Patch findet dann sein eigenes Muster
+nicht mehr. Im Patch selbst `chr(92)` statt `\\` verwenden. Das
 Skript liest binär, normalisiert auf `\n`, patcht, und schreibt das
 ursprüngliche Zeilenende zurück. Jedes Muster vorher auf **genau einen**
 Treffer prüfen und sonst abbrechen, bevor etwas geschrieben wird.
@@ -205,13 +222,39 @@ Zustand liegt in NVS über `Preferences` (`pet.cpp`, `save()` / `load()`).
 - Es gibt ein Schema-Feld `nvsVer`. Wenn du das Layout änderst: hochzählen und
   eine Migration schreiben. **Nutzer sollen für ein Update kein `WIPE` brauchen**
   — der Nutzer zieht ein echtes Pokémon groß und verliert es sonst.
+- Ein **neuer Schlüssel** mit Default braucht keinen `nvsVer`-Schritt —
+  Preferences ist Key-Value, alte Stände lesen den Default.
+- Structs als Blob (`putBytes`) nur mit Größencheck beim Laden
+  (`getBytesLength() == sizeof(...)`), sonst wird ein altes Blob falsch gelesen.
+- Bitmasken (Medaillen) nur **hinten** erweitern. Ein verschobenes Bit zeigt auf
+  jedem Altgerät eine falsche Medaille, und das ist nicht mehr zu unterscheiden.
+- **Der größte Feind des Spielstands ist der Flash-Befehl.** Siehe „Welcher
+  Stand liegt auf dem Gerät?" und `flash.bat`: nie das Vollabbild ab `0x0`.
 
 ## Testen ohne Hardware-Grind
 
-Die serielle Konsole (115200) ist die Testbank. Bestehende Kommandos:
+Die serielle Konsole (115200, Zeilenende LF) ist die Testbank. Kommandos:
 `STATS`, `SPEC <dex>`, `LVL <n>`, `HATCH`, `SHINY`, `NICK`, `BYE`, `RUN`,
 `ABANDON`, `WIPE`, `BEEP`, `REG`, `EGGS`, `GAL`, `CAREDAY`, `TIME`, `RTCSET`,
-`HEALTH`, `LS`, `PUT`.
+`HEALTH`, `LS`, `PUT`, dazu für den Kampf `BATTLE <dex>`, `BSIM <n> [lv]`,
+`BOND <n>`, `ENE <n>`, `FOE <dex> [shiny]`, `RIVAL`, `RIVAL <dex> [groll]`,
+`ARENA`, `ARENA <n>`, `HEAP <n>`. Was jedes tut: `docs/BATTLE_SPEC.md` §13.
+
+Den Port zu öffnen löst über DTR/RTS einen Reset aus. Zusammengehörige Befehle
+in **einer** Sitzung absetzen; was nicht in NVS steht, ist danach weg.
+
+**Prüfwerkzeuge ohne Gerät:**
+
+- `python3 tools/battle_sim.py --self-test` — Pflicht nach jeder
+  Engine-Änderung. `battle.cpp` und `battle_sim.py` sind Zwillinge; eine Regel
+  wird immer in beiden geändert.
+- Referenz: `python3 tools/battle_sim.py --n 20000 --level 25 --player-ai
+  elite --ai wild --bond 0 --spread 0` muss 56,19 % ± 3 treffen.
+- `python3 tools/battle_sim.py --entspannt` — ist das Spiel entspannt? Feste
+  Ziele, Exitcode 1, wenn eines verfehlt wird. Melden, nicht nachjustieren.
+- `python3 tools/check_i18n.py` — `StrId` und alle sechs Tabellen parallel?
+  Vor und nach einer i18n-Änderung `--dump`/`--diff`.
+- `python3 tools/check_flash.py --self-test`.
 
 **Neue Features kriegen ein Konsolen-Kommando, bevor sie eine UI kriegen.** Die
 Kampflogik muss headless über Serial testbar sein (`BATTLE <dex>`, `BSIM <n>`),
@@ -223,9 +266,15 @@ Schnelltest-Konstanten in `pet.h`: `PET_TICK_MS`, `MINUTES_PER_LEVEL`,
 
 ## Rendering
 
-- `render()` in `TamaPoke.ino` dispatcht über Bool-Flags (`gameOpen`,
-  `sackOpen`, `cardOpen`, …). Neue Screens folgen dem Muster: Flag + eigene
-  `renderX()` + Touch-Handling im selben Block.
+- `render()` in `TamaPoke.ino` dispatcht über Bool-Flags (`battleOpen`,
+  `learnOpen`, `cardOpen`, `galleryOpen`, …). Neue Screens folgen dem Muster:
+  Flag + eigene `renderX()` + Touch-Handling im selben Block.
+- Ein Kampf hat eine Art (`btKind`: frei, Rivale, Arena) und eine Gegner-KI
+  (`btFoeAi`). Neue Kampfarten bauen `btPl`/`btFo` und rufen `btBegin()` —
+  nicht den Kampfstart kopieren. `btClose()` ist der einzige Ausgang und
+  entlädt den Gegner-Sprite.
+- Für jedes neue Element die Ecken gegen Radius 231 um (233,233) nachrechnen.
+  Die aktuelle Tabelle steht in `docs/GERAETETEST.md` B8.
 - Der Screen ist **rund**. Alles in den Ecken wird abgeschnitten. Mittelpunkt
   ist `CX 233`, Buttons liegen auf dem unteren Bogen.
 - Anti-Burn-in-Dimming ist aktiv. Statische Vollbild-Elemente vermeiden.
@@ -241,11 +290,15 @@ Schnelltest-Konstanten in `pet.h`: `PET_TICK_MS`, `MINUTES_PER_LEVEL`,
 
 ## Arbeitsweise
 
-- Ein Branch pro Phase aus `docs/BATTLE_SPEC.md`, nicht alles in einen.
+- **Nur `main`.** Keine Branches, keine Worktrees. Kleine Commits, ein Thema
+  pro Commit, jeder kompiliert, danach pushen.
+- Jede Änderung, die am Gerät geprüft werden muss, hängt ihre Prüfschritte an
+  `docs/GERAETETEST.md` an.
 - Vor dem Refactor einer Datei: `git log --oneline -5 <datei>` — der Upstream
   ist aktiv, unnötige Divergenz macht spätere Merges teuer.
 - Wenn ein Feature das Spielgefühl verändert (Balancing, Zeitkonstanten),
-  **erst fragen**, nicht einfach entscheiden.
+  **erst fragen**, nicht einfach entscheiden. Leitlinie des Nutzers: ein
+  **entspanntes** Spiel, kein Kampf darf zur Wand werden.
 
 ## Werkzeuge einrichten — dauerhaft, nicht für die Sitzung
 
