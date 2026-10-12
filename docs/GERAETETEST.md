@@ -320,6 +320,42 @@ Levels, Untergrenze 1. Ein Sieg setzt zurück.
 3. Statuskarte Seite 4: XP-Balken notieren, einen freien Kampf gewinnen → der
    Balken wächst um rund ein Achtel, egal welches Level der Gegner hatte.
 
+## A16. Rivale und Arena auf dem Bildschirm
+
+Statuskarte Seite 1: die Fläche (96,300)–(370,340) teilt sich in bis zu drei
+gleich breite Knöpfe. Größter Eckabstand weiter 173,8 px.
+
+**Knöpfe**
+1. Rivale heute bereit, Arena nicht fertig → drei Knöpfe `KAMPF | RIVALE |
+   ARENA` (blau = Rivale, grün = Arena). Alle Labels lesbar, auf schmalen
+   Knöpfen notfalls klein, nie abgeschnitten.
+2. Stufe offen → der linke Knopf zeigt `KAMPF BEREIT` mit Rahmen.
+3. `ARENA 8` → der Arena-Knopf verschwindet. Danach `ARENA 0`.
+4. Rivale für heute besiegt → der Rivalen-Knopf verschwindet bis morgen.
+
+**Rivalenkampf**
+5. `RIVAL 25` (Slot Pikachu, Tag frei) → Knopf `RIVALE`: Kampf gegen
+   Pikachu auf Spielerlevel, Kopfzeile `Pikachu Nv.<level>`.
+6. Verlieren → Knopf `RIVALE` ist **noch da** (nur ein Sieg verbraucht den
+   Tag). `pech=1`, der nächste Rivalenkampf ist auf drei Vierteln des Levels.
+7. Gewinnen → XP-Balken wächst um rund ein **Viertel** (doppelte XP), der
+   Knopf verschwindet. `RIVAL` → `heute bereit=0`.
+8. Mit einem echten Snapshot (nach `BYE` mit Spitznamen) steht im Kampf der
+   **Spitzname** statt des Speziesnamens.
+
+**Arenakampf**
+9. `ARENA 0`, Knopf `ARENA` → Kampf gegen Sterndu, grüne Leiste
+   `ARENA 1/8` oben. Volle HP.
+10. Gewinnen → `ARENA` in der Konsole zeigt `schritt 1/3`, nächster Gegner
+    Goldini. Verlieren → derselbe Gegner bleibt, Schritt unverändert.
+11. Fliehen ist erlaubt, kostet wie jede Flucht, der Schritt bleibt.
+12. Dritten Gegner besiegen → `arenarang 1/8 schritt 0/3`, `STATS` zeigt
+    2 Trainingspunkte mehr (`tr=`).
+13. Mit offener Stufe: Arenasieg ist zugleich der Aufstieg, die Leiste oben
+    zeigt dann `KAMPF BEREIT` statt des Rangs.
+14. Rang 8 schaffen (`ARENA 7`, drei Siege) → Medaille `ARENA RANG 8` mit
+    Feier, `+5` Trainingspunkte, Arena-Knopf weg.
+
 ---
 
 # Teil B — liegt drauf, nie systematisch geprüft

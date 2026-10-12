@@ -103,6 +103,11 @@ uint32_t btActUntil = 0;
 bool learnOpen = false;  // 5.3: Lerndialog offen
 bool btLevelFight = false;  // 4.2: laeuft gerade der Levelkampf?
 bool btLevelUp = false;     // 4.2: dieser Kampf hat aufgestiegen
+// Art des laufenden Kampfs: frei, Rivale (5.5) oder Arena (7). Sie bestimmt
+// KI, Kopfzeile und was ein Sieg zusaetzlich bewirkt.
+enum : uint8_t { BK_FREE, BK_RIVAL, BK_ARENA };
+uint8_t btKind = BK_FREE;
+uint8_t btFoeAi = AI_WILD;
 // Testhilfe (Konsole FOE): erzwingt den naechsten Gegner. 0 = aus.
 // Bleibt gesetzt, bis FOE 0 kommt - so laesst sich ein Shiny-Gegner
 // wiederholt vorfuehren, statt auf die 1-zu-64-Chance zu warten.
@@ -858,8 +863,18 @@ void onTap(int16_t x, int16_t y) {
   if (cardOpen) {
     if (cardPage == 0 && y < 84) openKeyboard();  // tocar el nombre = renombrar
     else if (cardPage == 1 && y >= 300 && y <= 340 && x >= 96 && x <= 370) {
-      cardOpen = false;            // boton ENTRENAR FUERZA
-      startBattle();
+      uint8_t kinds[3];
+      uint8_t n = cardFightKinds(kinds);
+      for (uint8_t i = 0; i < n; i++) {
+        int bx, bw;
+        cardFightRect(i, n, &bx, &bw);
+        if (x < bx || x > bx + bw) continue;
+        cardOpen = false;
+        if (kinds[i] == BK_RIVAL) startRivalBattle();
+        else if (kinds[i] == BK_ARENA) startArenaBattle();
+        else startBattle();
+        break;
+      }
     } else {
       cardOpen = false;
     }
@@ -1340,7 +1355,9 @@ static void btFinish(uint8_t res) {
     bool wasPending = pet.levelPending();
     pet.battleWin(btFo.shiny);  // 6.7: shiny besiegt gibt MED_SHINYWIN
     if (wasPending) { pet.levelUp(); btLevelUp = true; }
-    else pet.addBattleXp(btFo.level);
+    else pet.addBattleXp(btFo.level, btKind == BK_RIVAL);  // Rivale: doppelt
+    if (btKind == BK_RIVAL) pet.markRivalFought();  // 5.5: nur ein Sieg zaehlt
+    if (btKind == BK_ARENA) pet.arenaFoeBeaten();   // 7: Gegner abgehakt
     if (pmd.has(PMD_POSE)) btActPl = PMD_POSE;
     btActUntil = millis() + 1600;
     sfxPlay(SFX_LEVEL);
@@ -1373,13 +1390,39 @@ void startBattle() {
   // Mitleid: nach Niederlagen in Folge kommt ein schwaecherer Gegner
   fighterFromDex(btFo, dex, pityLevel(pickFoeLevel(btPl.level, 2), pet.lossStreak),
                  shiny);
+  btBegin(BK_FREE, AI_WILD);
+}
 
+// 5.5: Rivalenkampf, einmal pro Kalendertag. rivalLevel() bringt die
+// Mitleidsregel schon mit; der Tag zaehlt erst mit einem Sieg (btFinish).
+void startRivalBattle() {
+  if (pet.isEgg() || pet.sleeping || pet.ceremony || !pet.rivalReady()) return;
+  fighterFromPet(btPl, pet);
+  fighterFromRival(btFo, pet.rival, pet.rivalLevel());
+  btBegin(BK_RIVAL, RIVAL_AI);
+}
+
+// 7: naechster Arenagegner - ein gewoehnlicher Kampf mit vollen HP, der
+// Fortschritt (arenaStep) laeuft ueber btFinish.
+void startArenaBattle() {
+  if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
+  if (pet.arenaRank >= ARENA_RANKS) return;
+  uint8_t rank = pet.arenaRank + 1;
+  fighterFromPet(btPl, pet);
+  arenaFoe(btFo, rank, pet.arenaStep, btPl.level, pet.lossStreak);
+  btBegin(BK_ARENA, arenaFoeAi(rank));
+}
+
+// Gemeinsamer Kampfstart, nachdem btPl und btFo stehen.
+void btBegin(uint8_t kind, uint8_t ai) {
+  btKind = kind;
+  btFoeAi = ai;
   // CLAUDE.md: vor dem Laden eines neuen Sprite-Slots das PSRAM pruefen.
   // Ein PMD-Sprite kostet bis zu ~220 KB; ohne Reserve lieber ohne Bild
   // kaempfen als eine Allokation platzen lassen.
   foePmd.unload();
   if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) > 512 * 1024)
-    foePmd.load((uint8_t)dex, shiny);
+    foePmd.load((uint8_t)btFo.dex, btFo.shiny);
 
   btLevelFight = pet.levelPending();  // 4.2: Levelkampf oder freier Kampf
   btLevelUp = false;
@@ -1407,7 +1450,7 @@ static void btRunRound(int8_t slot) {
   BattleEvent ev[BATTLE_MAX_EVENTS];
   uint8_t n = 0;
   btRound++;
-  btOutcome = battleRound(btPl, btFo, slot, AI_WILD, ev, &n);
+  btOutcome = battleRound(btPl, btFo, slot, btFoeAi, ev, &n);
   btApplyEvents(ev, n);
   if (btOutcome == BR_ONGOING && btRound >= BATTLE_MAX_ROUNDS) {
     // 6.4: nach 30 Runden gewinnt, wer prozentual mehr HP uebrig hat
@@ -1461,17 +1504,27 @@ void renderBattle() {
   }
 
   // 4.2: Levelkampf-Leiste. Der Gegnername steht bei y 76, hier ist frei.
-  if (btLevelFight) {
-    gfx->fillRoundRect(CX - 90, 56, 180, 18, 8, UI_BAR_WARN);
+  // Im Arenakampf steht dort der Rang - ausser der Sieg ist zugleich der
+  // Aufstieg, dann hat die Levelkampf-Leiste Vorrang.
+  char bar[20];
+  bar[0] = 0;
+  if (btLevelFight) snprintf(bar, sizeof(bar), "%s", T(S_BT_READY));
+  else if (btKind == BK_ARENA)
+    snprintf(bar, sizeof(bar), T(S_ARENA_FMT), pet.arenaRank + 1);
+  if (bar[0]) {
+    gfx->fillRoundRect(CX - 90, 56, 180, 18, 8,
+                       btLevelFight ? UI_BAR_WARN : UI_BAR_OK);
     gfx->setTextColor(UI_INK);
     gfx->setTextSize(1);
-    gfx->setCursor(CX - strlen(T(S_BT_READY)) * 3, 62);
-    gfx->print(T(S_BT_READY));
+    gfx->setCursor(CX - strlen(bar) * 3, 62);
+    gfx->print(bar);
   }
 
   // Gegner: oben rechts, leicht verkleinert, HP-Balken darueber
   char hdr[26];
-  snprintf(hdr, sizeof(hdr), "%s Nv.%u", DEX_TBL[btFo.dex].name, btFo.level);
+  const char *foeName = (btKind == BK_RIVAL && pet.rival.nick[0])
+                            ? pet.rival.nick : DEX_TBL[btFo.dex].name;
+  snprintf(hdr, sizeof(hdr), "%s Nv.%u", foeName, btFo.level);
   gfx->setTextColor(ink);
   gfx->setTextSize(1);
   gfx->setCursor(327 - strlen(hdr) * 3, 76);
@@ -1950,17 +2003,46 @@ void renderCardStats() {
   drawCardStat(202, T(S_STAT_SPE), pet.speStat(), 260, UI_BAR_WARN);
   drawCardStat(244, T(S_STAT_WGT), pet.weight, 100, 0xB3C8);
 
-  // Kampfbutton, zwei Zustaende (4.2): bei offener Stufe ist der naechste
-  // Sieg der Aufstieg - gleiche Flaeche, nur Farbe, Rahmen und Text
-  // wechseln, damit das Layout nicht springt.
+  // Kampfeinstiege nebeneinander auf derselben Flaeche (96,300)-(370,340):
+  // KAMPF immer, RIVALE solange er heute bereit ist, ARENA bis Rang 8. Die
+  // Flaeche bleibt gleich, nur die Teilung wechselt - groesster Eckabstand
+  // wie bisher 173,8 px. Bei offener Stufe ist der Kampfknopf auffaellig
+  // (4.2): der naechste Sieg ist der Aufstieg, egal in welchem Kampf.
+  uint8_t kinds[3];
+  uint8_t n = cardFightKinds(kinds);
   bool ready = pet.levelPending();
-  const char *lbl = ready ? T(S_BT_READY) : T(S_FIGHT_FREE);
-  gfx->fillRoundRect(96, 300, 274, 40, 12, ready ? UI_BAR_WARN : UI_BAR_BAD);
-  if (ready) gfx->drawRoundRect(96, 300, 274, 40, 12, UI_INK);
-  gfx->setTextColor(ready ? UI_INK : UI_BG_DAY);
-  gfx->setTextSize(2);
-  gfx->setCursor(CX - strlen(lbl) * 6, 311);
-  gfx->print(lbl);
+  for (uint8_t i = 0; i < n; i++) {
+    int x, w;
+    cardFightRect(i, n, &x, &w);
+    const char *lbl;
+    uint16_t bg, fg = UI_BG_DAY;
+    if (kinds[i] == BK_RIVAL) { lbl = T(S_BT_RIVAL); bg = 0x4C98; }
+    else if (kinds[i] == BK_ARENA) { lbl = T(S_BT_ARENA); bg = UI_BAR_OK; }
+    else if (ready) { lbl = T(S_BT_READY); bg = UI_BAR_WARN; fg = UI_INK; }
+    else { lbl = n == 1 ? T(S_FIGHT_FREE) : T(S_BATTLE); bg = UI_BAR_BAD; }
+    gfx->fillRoundRect(x, 300, w, 40, 12, bg);
+    if (kinds[i] == BK_FREE && ready) gfx->drawRoundRect(x, 300, w, 40, 12, UI_INK);
+    // so gross wie es passt - dasselbe Verfahren wie bei den Attackenbuttons
+    uint8_t ts = ((int)strlen(lbl) * 12 <= w - 8) ? 2 : 1;
+    gfx->setTextColor(fg);
+    gfx->setTextSize(ts);
+    gfx->setCursor(x + w / 2 - (int)strlen(lbl) * 3 * ts, 320 - 4 * ts);
+    gfx->print(lbl);
+  }
+}
+
+// Welche Kampfeinstiege die Statuskarte zeigt, in dieser Reihenfolge.
+uint8_t cardFightKinds(uint8_t out[3]) {
+  uint8_t n = 0;
+  out[n++] = BK_FREE;
+  if (pet.rivalReady()) out[n++] = BK_RIVAL;
+  if (pet.arenaRank < ARENA_RANKS) out[n++] = BK_ARENA;
+  return n;
+}
+
+void cardFightRect(uint8_t i, uint8_t n, int *x, int *w) {
+  *w = (274 - (n - 1) * 6) / n;
+  *x = 96 + i * (*w + 6);
 }
 
 // pagina 2: medallas con etiqueta descriptiva
