@@ -2,20 +2,57 @@
 
 Was am Gerät zu prüfen ist, weil es headless nicht geht.
 
-**Auf dem Gerät liegt `d8c8a40` (Phase 5).** Die NVS-Migration 1 → 2 ist dort
-schon gelaufen. Ungetestet ist damit alles, was danach kam:
+Zuletzt geflasht war `d8c8a40` (Phase 5). Alles danach ist am Gerät
+ungetestet: Teil A. Teil B lag schon drauf, wurde aber nie systematisch
+durchgegangen. Die Abschnitte stehen in der Reihenfolge, in der sie gebaut
+wurden — **geprüft wird in der Reihenfolge unten.**
 
-| Commit | Was davon ans Gerät muss |
-|---|---|
-| `8e6312f` | Konsolenbefehle `BOND`, `ENE`, `FOE` |
-| `2b51fdd` | Ballspiel entfernt, Hinweisband, Kampfbutton mit zwei Zuständen, Levelkampf-Leiste, Aufstiegsfeier, Gewicht −5 im Kampf |
-| `fc0ed9a` | anstehende Attacke überlebt den Neustart |
-| `2391b28` | langer Druck im Hinweisband löst kein Freilassen aus |
-| *dieser* | Commit-Hash in Bootzeile und `HEALTH` |
+## Prüfreihenfolge nach langer Pause
 
-Teil A ist die Pflicht — das ist neu und noch nie auf Hardware gelaufen.
-Teil B liegt schon drauf, wurde aber nie systematisch durchgegangen; das ist
-Nacharbeit, wenn Zeit ist.
+Grundsatz: zuerst den Spielstand sichern, zuletzt alles, was das Pokémon
+verbraucht. Jeder Block setzt den vorigen voraus.
+
+**1. Flash, ohne den Spielstand zu verlieren**
+1. B1 Schritt 1 — `STATS` und `HEALTH` notieren, **bevor** geflasht wird
+2. committen, `tools\build.ps1`, `flash.bat` (B1 Schritt 2)
+3. B1 Schritt 3 — Spielstand noch da?
+4. A1 — läuft der Stand, der gebaut wurde? (Hash in Bootzeile und `HEALTH`)
+
+Fehlt der Spielstand oder stimmt der Hash nicht: **hier anhalten.**
+
+**2. Anzeige, ohne zu kämpfen**
+5. B2 und A10 — sechs Sprachen, kein verrutschter Text
+6. A2 — Icons, Spielen startet den Kampf
+7. B6 und A9 — Statuskarte, Medaillenseite mit elf Kacheln
+8. B8, Teil „Rand" — die Tabelle von oben nach unten ansehen
+
+**3. Kämpfen**
+9. A7 — die Konsolenbefehle, sie sind das Werkzeug für alles Weitere
+10. B4 — freier Kampf, Sprites, Attackenbuttons
+11. A12 — Beere
+12. A5 — Kampfkosten
+13. A15 und A14 — Gegnerlevel, XP pauschal, Mitleidsregel
+14. B5 — AP zwischen den Kämpfen
+
+**4. Levelaufstieg**
+15. A3 — Hinweisband und Levelkampf
+16. A4 — langer Druck im Hinweisband
+17. A8 — Lerndialog und Neustart davor
+
+**5. Rivale und Arena**
+18. A11 Schritte 1–4 — Rivalenslot über die Konsole
+19. A13 — Arena über die Konsole
+20. A16 — beides auf dem Bildschirm (ersetzt A6)
+
+**6. Härtung**
+21. A17 — `HEAP 300`, drei Arenakämpfe hintereinander
+22. B7 — `BSIM`-Abnahme gegen den Simulator
+23. B8, Teil „Burn-in" — Dimmen, Aufweck-Tipp löst nichts aus
+24. über Nacht: `HEALTH` morgens und abends, Uptime und Heap vergleichen
+
+**7. Zum Schluss — verbraucht das Pokémon**
+25. A11 Schritte 5–7 — Snapshot bei Abschied, Freilassen, Weglaufen
+26. B3 — Starterauswahl, braucht `WIPE`
 
 ## Vor dem Anfangen
 
@@ -118,10 +155,8 @@ gegen Bonbons (+12 pro Stück).
 
 ## A6. Kampfbutton auf der Statuskarte
 
-Nach oben wischen, Seite 1. Der Button hat zwei Zustände auf derselben Fläche
-(96,300)–(370,340): normal (freier Kampf) und auffällig, wenn eine Stufe offen
-ist. Beide antippen, beide müssen den Kampf starten. Das Layout darf beim
-Wechsel nicht springen.
+Überholt durch A16: der Button ist inzwischen in bis zu drei Knöpfe geteilt
+(`KAMPF | RIVALE | ARENA`). Dort prüfen.
 
 ## A7. Die neuen Konsolenbefehle
 
