@@ -280,6 +280,20 @@ Alles ASCII-Großbuchstaben ohne Umlaute (`GLUT`, `RASIERBLATT`, `DONNERSCHOCK`)
   **ablehnen**. Das passt zur Design-Philosophie des Projekts — Entwicklung und
   Abschied laufen genauso, der Spieler entscheidet und sieht zu.
 - Bei der Entwicklung bleiben die Attacken erhalten.
+- **Movepools erben über die Entwicklungskette:** hat eine Spezies auf ihrem
+  Level selbst nichts zu lernen, zählt das Learnset der Vorstufe (Metapod erbt
+  so die Attacke von Raupy).
+- **STAB-Garantie:** wer per Level keine Attacke seines eigenen Typs lernt,
+  bekommt im Generator eine passende TM (`tools/gen_move_data.py`). Pikachu
+  hat dadurch immer eine Elektro-Attacke.
+- **Verzweifler ist Move-ID 1** (`MOVE_STRUGGLE`), steht in keinem Movepool
+  und ist der letzte Ausweg: sind alle AP leer oder ist der Pool leer (Ditto),
+  kämpft das Pokémon damit.
+- **Fixschaden-Attacken** (Drachenwut, Nachtnebel, Geowurf, Psywelle) haben in
+  Gen 1 keine Stärke und fielen sonst aus dem Pool. Der Generator gibt ihnen
+  eine feste Stärke (`POWER_OVERRIDE`); die Engine kennt keinen Fixschaden.
+- Die anstehende Attacke (`pendingMove`) liegt in NVS. Ein Neustart zwischen
+  Aufstieg und Entscheidung verliert sie nicht, und „ablehnen" wird gespeichert.
 
 ### 5.4 Neue Felder in `Pet` (`pet.h`)
 
@@ -291,17 +305,32 @@ uint8_t  moves[4]     = {0}; // Attacken-IDs, 0 = leerer Slot
 uint8_t  pp[4]        = {0};
 uint16_t battlesWon   = 0;
 uint16_t battlesLost  = 0;
-uint8_t  lossStreak   = 0;   // Mitleidsstaffelung, siehe 6.5
-uint8_t  arenaRank    = 0;   // 0-8, gehört dem Spieler
-uint32_t rivalDay     = 0;   // letzter Tag mit Rivalenkampf
+uint8_t  lossStreak   = 0;   // Niederlagen in Folge, Mitleidsregel 6.7
+uint8_t  pendingMove  = 0;   // anstehende Attacke, NVS "pendmv" (5.3)
+Rival    rival;              // Rivalenblock, NVS "rival" (5.5)
+uint32_t rivalDay     = 0;   // Tag des letzten Rivalen-SIEGS, als today()+1
+uint8_t  arenaRank    = 0;   // 0-8, geschaffte Ränge, gehört dem Spieler
+uint8_t  arenaStep    = 0;   // 0-2, besiegte Gegner im laufenden Rang
 uint8_t  nvsVer       = 2;
 ```
+
+Alle Felder nach Schema 2 sind neue Schlüssel mit Default in `load()`.
+Preferences ist Key-Value: alte Stände lesen sie als Default, ein
+`nvsVer`-Schritt war dafür nicht nötig. Medaillen-Bits werden nur hinten
+angehängt (`MED_FIRSTWIN` 8, `MED_SHINYWIN` 9, `MED_ARENA` 10).
 
 **Migration von Schema 1:** vorhandene Spielstände haben `ageMinutes` und daraus
 abgeleitete Level. Beim ersten Start mit Schema 2:
 `levelsWon = ageMinutes / 60`, `xpMinutes = 0`, `finalFormAt = ageMinutes` falls
 bereits Endstufe, Attacken aus dem Learnset nachziehen. Der Nutzer behält sein
 Pokémon. **Kein `WIPE`.**
+
+**Achtung, nie am Gerät mit Altdaten gelaufen.** Beim Flash von Phase 5 ging
+das Pokémon verloren — nicht durch `migrate()`, sondern weil das 16-MB-
+Vollabbild `merged.bin` ab `0x0` geschrieben wurde. Es enthält an der Stelle
+der NVS-Partition nur `0xFF`. Seitdem flasht `flash.bat` nur die Teile aus
+`flash_args`, und `tools/check_flash.py` prüft vorher, dass NVS unberührt
+bleibt.
 
 ### 5.5 Rivale (eigener NVS-Block)
 
@@ -455,6 +484,13 @@ Volltreffer bei 4 % (12,5 % bei Effekt 4): `dmg *= 2`.
 Alles Integer, `uint32_t` als Zwischentyp gegen Überlauf. Der Bindungsbonus gilt
 nur für den Spieler; der Rivale hat stattdessen seinen Groll-Bonus.
 
+Die Typfaktoren werden **zweistufig** angewendet, mit Abrunden nach jeder
+Stufe — so wie oben geschrieben. `battle.cpp` benutzt dafür bewusst nicht
+`typeMult()` aus `types.h`; die Begründung steht in `tools/gen_types.py`.
+
+**Mindestschaden 1** — außer bei Immunität. Ist der Typfaktor 0, bleibt der
+Schaden 0. Immunität ist Immunität.
+
 5. Statuseffekt anwenden, Rundenschaden durch Gift und Brand am Rundenende.
 6. Bei HP 0 ist der Kampf vorbei — außer die Bindung rettet (6.5).
 
@@ -509,8 +545,10 @@ Drei Stufen, bewusst simpel:
   das wurde nie angewendet und hätte sehr schwache Spezies nicht gerettet.
   Niemand soll auf Stufe 7 festhängen, weil ihm ein Typ fehlt.
 
-**Kosten in jedem Fall**, unabhängig vom Ausgang: `−15 ENE`, `−8 FOOD`,
-`−5 HYG`. Energie regeneriert nur im Schlaf mit +6/min — daraus ergibt sich von
+**Kosten in jedem Fall**, unabhängig vom Ausgang und auch bei Flucht:
+`−15 ENE`, `−8 FOOD`, `−5 HYG`, `−5 Gewicht`. Das Gewicht ersetzt den Abbau des
+entfernten Ballspiels — ohne ihn gäbe es gegen Bonbons (+12) keinen aktiven
+Hebel. Energie regeneriert nur im Schlaf mit +6/min — daraus ergibt sich von
 selbst der Rhythmus „vier, fünf Kämpfe, dann ein Nickerchen". AP füllen sich
 beim Aufwachen komplett auf.
 
@@ -585,9 +623,26 @@ Runder Screen, 466×466, Mittelpunkt `CX 233`. Die Ecken sind abgeschnitten.
   einem runden Touchscreen zudem leichter zu treffen als ein Viertel. Der
   Nebeneffekt passt zur Engine: sind alle AP leer, fällt sie auf Verzweifler
   zurück, und die Reihe kollabiert von selbst auf genau einen Button.
-- Beerenbutton in der Mitte, ausgegraut wenn unentdeckt oder verbraucht
+- Beerenbutton mittig **unter** der Attackenreihe, 100×30 bei (183,388),
+  ausgegraut wenn unentdeckt oder verbraucht. Links über der Reihe liegt der
+  eigene HP-Balken; ein Spiegel der Fluchttaste hätte ihn verdeckt.
 - Fluchtbutton in jedem Kampf. Flucht aus der Arena kostet wie jede Flucht, der Fortschritt bleibt
 - Beim Rivalen: sein gespeicherter Spitzname im Header statt des Speziesnamens
+- Oben eine schmale Leiste: `KAMPF BEREIT` beim Levelkampf, sonst im
+  Arenakampf der Rang (`ARENA n/8`)
+
+**Einstiege.** Freier Kampf über das Spielen-Icon. Auf Statuskarte Seite 1
+teilt sich die Fläche (96,300)–(370,340) in bis zu drei gleich breite Knöpfe:
+`KAMPF` immer, `RIVALE` solange er heute bereit ist, `ARENA` bis Rang 8. Bei
+offener Stufe ist der Kampfknopf auffällig (`KAMPF BEREIT`), und auf dem
+Hauptschirm erscheint das Hinweisband (113,106)–(353,134), das den Levelkampf
+direkt startet. Ein langer Druck im Band löst kein Freilassen aus.
+
+**Medaillenseite:** elf Medaillen, zwei Spalten mal sechs Reihen, Kachel
+180×32. Der Kacheltext wird so groß gesetzt, wie er passt.
+
+**Rand:** jedes Element liegt im Radius 231 um (233,233). Die vollständige
+Tabelle mit Eckabständen steht in `docs/GERAETETEST.md`, Abschnitt B8.
 
 **Animation** über die vorhandenen PMD-Aktionen: `Attack` (ID 6) beim Angriff,
 `Hurt` (ID 5) beim Treffer, `Pose` (ID 7) beim Sieg.
@@ -618,7 +673,8 @@ Eintrag verschiebt die ganze Tabelle und liefert falschen Text.
 
 ## 10. Phasen
 
-Ein Branch pro Phase. Jede Phase muss für sich kompilieren und lauffähig sein.
+Alles auf `main`, kleine Commits, jeder kompiliert. Jede Phase muss für sich
+lauffähig sein.
 
 **Phase 0 — Fundament**
 `arduino-cli` einrichten, unveränderte Baseline kompilieren und flashen,
@@ -662,8 +718,25 @@ Acht Ränge, Trainerteams (ohne Rivalen, Fortschritt pro Gegner), Belohnungen, d
 *Fertig, wenn:* Rang 8 erreichbar ist und die Medaille vergeben wird.
 
 **Phase 8 — Härtung**
-Soak-Test 24 h über `HEALTH` (Uptime und Heap sind bereits instrumentiert),
-Heap-Prüfung nach je 50 Kämpfen, Balancing nachziehen.
+Soak-Test 24 h über `HEALTH` (Uptime, Heap und PSRAM sind instrumentiert),
+`HEAP <n>` prüft Heap und PSRAM nach je 50 Kämpfen aller drei Arten
+einschließlich Sprite-Laden, Balancing über `battle_sim.py --entspannt`.
+
+**Stand (2026-10-12)**
+
+| Phase | Code | am Gerät |
+|---|---|---|
+| 0 Fundament | fertig | geprüft |
+| 1 Typdaten | fertig | geprüft (mit Phase 5 geflasht) |
+| 2 Attackendaten | fertig | geprüft (mit Phase 5 geflasht) |
+| 3 Engine | fertig, BSIM-Abnahme bestanden | `BSIM`-Gegenprobe offen |
+| 4 Kampf-UI | fertig | teilweise, Beere und Kampfknöpfe neu |
+| 5 Levelkurve | fertig | Migration **nie** mit Altdaten gelaufen (s. 5.4) |
+| 6 Rivale | fertig | offen |
+| 7 Arena | fertig | offen |
+| 8 Härtung | Werkzeuge fertig (`HEAP`, `--entspannt`, Radiustabelle) | Soak-Test offen |
+
+Was am Gerät zu prüfen ist, in Reihenfolge: `docs/GERAETETEST.md`.
 
 ---
 
@@ -673,9 +746,9 @@ Alles hier ist bewusst so entschieden und jederzeit umkehrbar:
 
 1. **Geist-gegen-Psycho-Bug ist gefixt.** Über `GEN1_GHOST_BUG` zurückschaltbar.
 2. **Niederlage kostet nur Ressourcen**, keinen Slip-up, sofortiger Retry,
-   Staffelung ab drei Niederlagen. Ein Tamagotchi, das fürs Verlieren bestraft,
-   wird schnell freudlos.
-3. **~60 Attacken statt 165.** Fühlt es sich zu dünn an, hebt der Generator die
+   und die Mitleidsregel (6.7) senkt jeden weiteren Gegner. Ein Tamagotchi,
+   das fürs Verlieren bestraft, wird schnell freudlos.
+3. **103 Attacken statt 165.** Fühlt es sich zu dünn an, hebt der Generator die
    Schwelle einfach an.
 4. **Kein Banking von Leveln.** Genau eine offene Stufe. Wer zwei Wochen weg war,
    kämpft einmal und ist wieder im Fluss.
@@ -686,6 +759,21 @@ Alles hier ist bewusst so entschieden und jederzeit umkehrbar:
    und das ist ein anderes Spiel.
 7. **Care-Patzer wirken nicht im Kampf.** War überlegt, wurde verworfen — die
    Bestrafung über verzögerte Entwicklung reicht.
+8. **Entspannt statt herausfordernd** (2026-10-11, Entscheidung des Nutzers).
+   Kein Kampf darf zur Wand werden: Mitleidsregel ohne Deckel, wilde Gegner nie
+   über dem Spieler, XP pauschal, Arena mit Fortschritt pro Gegner und ohne
+   Typ-Sackgassen. Prüfstein ist `battle_sim.py --entspannt`.
+9. **Balancing entscheidet der Nutzer.** Werkzeuge messen und melden, sie
+   justieren nicht selbst.
+10. **Kämpfen ist immer erlaubt**, auch erschöpft (−25 % ATK und SPD unter
+    20 Energie). Nur Eier und schlafende Pokémon kämpfen nicht.
+11. **Bindung:** Schaden `+bond/5` %, K.-o.-Rettung mit Chance `bond/3` %,
+    einmal pro Kampf.
+12. **25 einstufige Spezies** bekommen `finalFormAt` beim Schlüpfen, sonst
+    könnten sie sich nie verabschieden.
+13. **Kein Netzwerk, nur Gen 1.**
+14. **Flashen schont den Spielstand.** Nie das Vollabbild ab `0x0`; `flash.bat`
+    schreibt die Teile aus `flash_args`, `tools/check_flash.py` prüft vorher.
 
 ---
 
@@ -697,3 +785,24 @@ Company. Basiswerte, Typen und Attackendaten kommen von PokéAPI.
 
 Das Projekt bleibt damit **nicht-kommerziell**. Kein Verkauf, keine Werbung, kein
 Rebranding. Die Upstream-Attribution in `CREDITS.md` bleibt bestehen.
+
+---
+
+## 13. Werkzeuge
+
+| Werkzeug | Zweck |
+|---|---|
+| `tools\build.ps1` | Bauen mit Commit-Hash im Binary (`-dirty` bei offenen Änderungen) |
+| `flash.bat` | Flashen ohne den Spielstand anzufassen, fragt nach dem Port |
+| `tools/check_flash.py` | rechnet vor jedem Flash nach, dass NVS unberührt bleibt |
+| `tools/check_i18n.py` | prüft, dass `StrId` und alle sechs Tabellen parallel laufen |
+| `tools/battle_sim.py --self-test` | Zwilling der Engine, Pflicht nach jeder Engine-Änderung |
+| `tools/battle_sim.py --entspannt` | Abnahme: ist das Spiel entspannt? |
+| `tools/battle_sim.py --rival / --arena / --berry` | Messreihen |
+
+**Konsole** (115200 Baud, LF): `STATS` (mit `pech=`), `HEALTH` (mit `psram=`
+und `fw=`), `LVL <n>`, `SPEC <dex>`, `BATTLE <dex>`, `BSIM <n> [lv]`,
+`BOND <n>`, `ENE <n>`, `FOE <dex> [shiny]`, `RIVAL`, `RIVAL <dex> [groll]`,
+`ARENA`, `ARENA <n>`, `HEAP <n>`, dazu die Pflegebefehle aus dem Original
+(`HATCH`, `SHINY`, `NICK`, `BYE`, `RUN`, `ABANDON`, `WIPE`, `TIME`, `RTCSET`,
+`CAREDAY`, `REG`, `EGGS`, `GAL`, `BEEP`, `LS`, `PUT`).
