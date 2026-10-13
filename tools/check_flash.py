@@ -8,6 +8,7 @@ so ist das beim Flash von Phase 5 passiert.
 
     python3 tools/check_flash.py [build/battle]   # Exitcode 0 = sicher
     python3 tools/check_flash.py --self-test
+    python3 tools/check_flash.py --web          # Browser-Installer in web/
 """
 import os
 import sys
@@ -58,6 +59,31 @@ def problems(nvs, segs):
             for a, f, n in segs if a < hi and a + n > lo]
 
 
+def web_segments(manifest, firmware_dir):
+    """(Adresse, Datei, Laenge) aus dem Manifest des Web-Installers."""
+    import json
+    out = []
+    for build in json.loads(manifest)['builds']:
+        for part in build['parts']:
+            path = os.path.join(firmware_dir, os.path.basename(part['path']))
+            out.append((int(part['offset']), part['path'], os.path.getsize(path)))
+    return out
+
+
+def check_web(manifest_path, partitions_csv):
+    """Der Browser-Installer schreibt seine Teile ohne Erase genauso hart wie
+    esptool - auch er darf NVS nicht beruehren."""
+    manifest = open(manifest_path, encoding='utf-8').read()
+    fw = os.path.join(os.path.dirname(manifest_path), 'firmware')
+    csv = open(partitions_csv, encoding='utf-8').read()
+    bad = problems(nvs_range(csv), web_segments(manifest, fw))
+    for b in bad:
+        print('GEFAHR (Web-Installer): ' + b)
+    if not bad:
+        print('sicher: der Web-Installer beruehrt den Spielstand (NVS) nicht')
+    return not bad
+
+
 def check(build_dir):
     csv = open(os.path.join(build_dir, 'partitions.csv'), encoding='utf-8').read()
     args = open(os.path.join(build_dir, 'flash_args'), encoding='utf-8').read()
@@ -103,5 +129,9 @@ if __name__ == '__main__':
     if '--self-test' in sys.argv:
         self_test()
         sys.exit(0)
+    if '--web' in sys.argv:
+        # gleiches Partitionsschema wie der Build (tools/build_web.sh: gleiche FQBN)
+        csv = os.path.join(ROOT, 'build', 'battle', 'partitions.csv')
+        sys.exit(0 if check_web(os.path.join(ROOT, 'web', 'manifest.json'), csv) else 1)
     d = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'battle')
     sys.exit(0 if check(d) else 1)

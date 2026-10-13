@@ -10,7 +10,11 @@ same one as `tools/send_sd.py`).
 
 - `index.html` — the page (flashing + sprite loader).
 - `manifest.json` — ESP Web Tools config (points at the firmware).
-- `firmware/tamapoke.bin` — combined firmware, flashable at `0x0`.
+- `firmware/bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `app.bin` — the
+  firmware in four parts at `0x0`, `0x8000`, `0xe000` and `0x10000`. Deliberately
+  **not** one combined image at `0x0`: that covers the NVS partition
+  (`0x9000`-`0xe000`) with `0xFF` and wiped the saved pet on every update, even
+  without *Erase*. `python3 tools/check_flash.py --web` checks this.
 - `sprites.pak` — all the sprites in one bundle (TPAK), so the page sends them in
   one click. **Generated** by `tools/pack_bundle.py` (gitignored by default — see
   *Hosting the sprites* below).
@@ -20,7 +24,7 @@ same one as `tools/send_sd.py`).
 After changing the firmware or the sprites:
 
 ```bash
-bash tools/build_web.sh        # recompiles -> firmware/tamapoke.bin AND rebuilds sprites.pak
+bash tools/build_web.sh        # recompiles -> firmware/*.bin AND rebuilds sprites.pak
 ```
 
 ## Test locally
