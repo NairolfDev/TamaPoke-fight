@@ -676,6 +676,13 @@ void handleSerial() {
   } else if (line == "ABANDON") {
     pet.dbgRunawayReady();  // fuerza el estado "lista para escaparse" (test del boton)
     Serial.println("DONE");
+  } else if (line == "REBOOT") {
+    // Neustart wie "Strom aus": KEIN save() vorher - geprueft werden soll,
+    // was in NVS steht. Den Port zu oeffnen ist kein verlaesslicher Reset
+    // (am Geraet gemessen: mal ja, mal nein).
+    Serial.println("DONE");
+    delay(100);
+    ESP.restart();
   } else if (line == "WIPE") {
     pet.factoryReset();     // borra NVS y reinicia -> partida nueva (eleccion de inicial)
     Serial.println("DONE");

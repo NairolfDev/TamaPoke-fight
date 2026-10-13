@@ -242,10 +242,14 @@ Die serielle Konsole (115200, Zeilenende LF) ist die Testbank. Kommandos:
 `ABANDON`, `WIPE`, `BEEP`, `REG`, `EGGS`, `GAL`, `CAREDAY`, `TIME`, `RTCSET`,
 `HEALTH`, `LS`, `PUT`, dazu für den Kampf `BATTLE <dex>`, `BSIM <n> [lv]`,
 `BOND <n>`, `ENE <n>`, `FOE <dex> [shiny]`, `RIVAL`, `RIVAL <dex> [groll]`,
-`ARENA`, `ARENA <n>`, `HEAP <n>`. Was jedes tut: `docs/BATTLE_SPEC.md` §13.
+`ARENA`, `ARENA <n>`, `HEAP <n>`, `REBOOT`. Was jedes tut:
+`docs/BATTLE_SPEC.md` §13.
 
-Den Port zu öffnen löst über DTR/RTS einen Reset aus. Zusammengehörige Befehle
-in **einer** Sitzung absetzen; was nicht in NVS steht, ist danach weg.
+**Den Port zu öffnen ist kein verlässlicher Reset.** Am Gerät gemessen: einmal
+lief es nach dem Öffnen seit 27 932 s weiter, beim nächsten Öffnen seit 11 s —
+je nachdem, wie das vorige Programm den Port verlassen hat. Für Tests, die
+einen Neustart brauchen, gibt es `REBOOT` (wie Strom aus, ohne vorher zu
+speichern). Zusammengehörige Befehle trotzdem in **einer** Sitzung absetzen.
 
 **Prüfwerkzeuge ohne Gerät:**
 

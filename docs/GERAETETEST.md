@@ -59,9 +59,11 @@ Fehlt der Spielstand oder stimmt der Hash nicht: **hier anhalten.**
 **Serielle Konsole, 115200 Baud, Zeilenende LF.** Die Firmware liest bis `\n`
 und trimmt; ohne LF passiert nichts.
 
-**Das Öffnen des Ports löst über DTR/RTS einen Reset aus.** Alles, was nicht in
-NVS steht, ist beim nächsten Verbinden weg. Zusammengehörige Befehle gehören
-deshalb in **eine** Sitzung — nicht Port auf, ein Befehl, Port zu.
+**Neustart heißt hier immer `REBOOT`.** Das Öffnen des Ports ist kein
+verlässlicher Reset — am Gerät mal ja, mal nein. `REBOOT` startet neu wie
+„Strom aus": was nicht in NVS steht, ist danach weg, und genau das prüfen die
+Neustart-Schritte. Danach den Port neu öffnen. Zusammengehörige Befehle in
+**eine** Sitzung.
 
 **Flashen:** committen, `tools\build.ps1`, dann `flash.bat` im Repo-Ordner
 und den Port eingeben. Die Datei zeigt den Hash, der gleich auf dem Gerät
@@ -180,7 +182,7 @@ gegen Bonbons (+12 pro Stück).
 - Nach dem Aufstiegssieg öffnet der Lerndialog. Alle vier alten Attacken plus
   der Ablehnen-Knopf antippbar und im Radius.
 - **Der eigentliche Test:** Dialog offen lassen und **vor** der Entscheidung
-  neu starten (Reset oder Port neu öffnen). Der Dialog muss **wiederkommen**.
+  neu starten (`REBOOT`). Der Dialog muss **wiederkommen**.
   Tut er das nicht, ist die Attacke verloren — das Level steigt kein zweites
   Mal, und der Spieler merkt es nie. Der Schlüssel heißt `pendmv`.
 - Ersetzen: Statuskarte zeigt die neue Attacke im gewählten Slot. Neustart →
@@ -264,7 +266,7 @@ Phase 6 (§5.5). Der Rivale liegt als ein Block unter dem NVS-Schlüssel
 2. `RIVAL 25` → Slot ist Pikachu, Gene 100, `ende=abschied`.
 3. `RIVAL 25 1` → `ende=weggelaufen (+10% ATK)`. Die `atk=` in der
    Kampfzeile muss um 10 % über der aus Schritt 2 liegen, `def=`/`spe=` gleich.
-4. Neustart (Port neu öffnen), `RIVAL` → Pikachu mit Groll ist noch da.
+4. `REBOOT`, `RIVAL` → Pikachu mit Groll ist noch da.
 
 **Snapshot bei allen drei Enden.** Jedes Ende verbraucht das aktuelle Pokémon
 — das gehört ans Ende der Testsitzung oder auf ein entbehrliches Pokémon.
@@ -475,7 +477,7 @@ fünf antippbar — auch die unterste Zeile.
 1. Kampf mit halbleeren AP beenden.
 2. Neuer Kampf → die AP stehen noch da.
 3. Schlafen lassen und aufwecken → alle AP voll (`refillPp`).
-4. Zwischendurch Reset → die AP sind immer noch da, nicht zurückgesetzt.
+4. Zwischendurch `REBOOT` → die AP sind immer noch da, nicht zurückgesetzt.
 
 ## B6. Statuskarte, restliche Seiten
 
