@@ -1421,7 +1421,10 @@ static void btFinish(uint8_t res) {
     pet.battleWin(btFo.shiny);  // 6.7: shiny besiegt gibt MED_SHINYWIN
     if (wasPending) { pet.levelUp(); btLevelUp = true; }
     else pet.addBattleXp(btFo.level, btKind == BK_RIVAL);  // Rivale: doppelt
-    if (btKind == BK_RIVAL) pet.markRivalFought();  // 5.5: nur ein Sieg zaehlt
+    // 5.5: nur ein Sieg verbraucht den Tag - und nicht der, der zugleich der
+    // Aufstieg war. Dann gab es keine doppelten XP, also darf man heute
+    // nochmal. Farmen geht nicht: jeder Aufstieg kommt nur einmal.
+    if (btKind == BK_RIVAL && !wasPending) pet.markRivalFought();
     if (btKind == BK_ARENA) pet.arenaFoeBeaten();   // 7: Gegner abgehakt
     if (pmd.has(PMD_POSE)) btActPl = PMD_POSE;
     btActUntil = millis() + 1600;

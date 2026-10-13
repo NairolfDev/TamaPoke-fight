@@ -358,7 +358,10 @@ struct Rival {
 
 Auftritt: einmal pro echtem Kalendertag als Option im freien Kampf, mit
 **doppelter XP**. `rivalDay` wird nur durch einen **Sieg** gesetzt — nach einer
-Niederlage darf man sofort nochmal.
+Niederlage darf man sofort nochmal. Ein Sieg, der zugleich der Levelaufstieg
+war, zählt nicht: er brachte keine doppelten XP, also bleibt der Rivale für
+heute verfügbar (Entscheidung des Nutzers, 2026-10-13). Farmen geht nicht,
+jeder Aufstieg kommt nur einmal.
 
 *Entspannt (2026-10-11):* früher Spielerlevel + 2, Elite-KI, Tag schon beim
 Kampfstart verbraucht, und der Rivale war dritter Gegner der Arenaränge 3, 6

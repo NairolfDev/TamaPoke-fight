@@ -379,6 +379,9 @@ gleich breite Knöpfe. Größter Eckabstand weiter 173,8 px.
    Tag). `pech=1`, der nächste Rivalenkampf ist auf drei Vierteln des Levels.
 7. Gewinnen → XP-Balken wächst um rund ein **Viertel** (doppelte XP), der
    Knopf verschwindet. `RIVAL` → `heute bereit=0`.
+7b. Mit **offener Stufe** gegen den Rivalen gewinnen (`RIVAL 25` gibt den Tag
+   frei) → Aufstiegsfeier statt doppelter XP, und der Knopf `RIVALE` ist
+   **noch da**. Der nächste Rivalensieg ohne offene Stufe verbraucht ihn.
 8. Mit einem echten Snapshot (nach `BYE` mit Spitznamen) steht im Kampf der
    **Spitzname** statt des Speziesnamens.
 
