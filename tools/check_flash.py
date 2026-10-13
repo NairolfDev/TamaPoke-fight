@@ -24,16 +24,31 @@ def nvs_range(partitions_csv):
     raise ValueError('keine nvs-Partition in partitions.csv')
 
 
-def segments(flash_args, sizes):
-    """(Adresse, Datei, Laenge) aus flash_args; sizes: Datei -> Bytes."""
+def pairs(flash_args):
+    """(Adresse, Datei) aus flash_args - Wort fuer Wort, so wie esptool die
+    Datei liest. Schalter (--x wert) werden uebersprungen; ein Wort, das
+    weder Schalter noch Adresse ist, bricht ab, statt still uebersehen zu
+    werden."""
+    words = flash_args.split()
     out = []
-    for line in flash_args.splitlines():
-        parts = line.split()
-        if len(parts) == 2 and parts[0].startswith('0x'):
-            out.append((int(parts[0], 16), parts[1], sizes[parts[1]]))
+    i = 0
+    while i < len(words):
+        w = words[i]
+        if w.startswith('--'):
+            i += 2
+        elif w.lower().startswith('0x') and i + 1 < len(words):
+            out.append((int(w, 16), words[i + 1]))
+            i += 2
+        else:
+            raise ValueError('unbekanntes Wort in flash_args: %r' % w)
     if not out:
         raise ValueError('flash_args enthaelt keine Adressen')
     return out
+
+
+def segments(flash_args, sizes):
+    """(Adresse, Datei, Laenge); sizes: Datei -> Bytes."""
+    return [(a, f, sizes[f]) for a, f in pairs(flash_args)]
 
 
 def problems(nvs, segs):
@@ -46,9 +61,7 @@ def problems(nvs, segs):
 def check(build_dir):
     csv = open(os.path.join(build_dir, 'partitions.csv'), encoding='utf-8').read()
     args = open(os.path.join(build_dir, 'flash_args'), encoding='utf-8').read()
-    names = [l.split()[1] for l in args.splitlines()
-             if len(l.split()) == 2 and l.split()[0].startswith('0x')]
-    sizes = {n: os.path.getsize(os.path.join(build_dir, n)) for n in names}
+    sizes = {f: os.path.getsize(os.path.join(build_dir, f)) for _, f in pairs(args)}
     bad = problems(nvs_range(csv), segments(args, sizes))
     for b in bad:
         print('GEFAHR: ' + b)
@@ -72,6 +85,17 @@ def self_test():
     assert problems((0x9000, 0xE000), [(0x8000, 'p', 0x1000)]) == []
     assert problems((0x9000, 0xE000), [(0x8000, 'p', 0x1001)])
     assert problems((0x9000, 0xE000), [(0xE000, 'p', 0x2000)]) == []
+    # esptool liest @flash_args Wort fuer Wort - mehrere Teile in einer Zeile
+    # muessen genauso gesehen werden wie einer pro Zeile.
+    one_line = '--flash-mode dio 0x0 boot.bin 0x8000 merged.bin\n'
+    assert [s[1] for s in segments(one_line, sizes)] == ['boot.bin', 'merged.bin']
+    assert problems(nvs_range(csv), segments(one_line, sizes)), 'Gefahr uebersehen'
+    # ein Wort, das weder Schalter noch Adresse ist: lieber abbrechen
+    try:
+        segments('0x0 boot.bin seltsam\n', sizes)
+        raise AssertionError('unbekanntes Wort nicht erkannt')
+    except ValueError:
+        pass
     print('Selbsttest OK')
 
 

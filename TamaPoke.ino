@@ -930,7 +930,10 @@ void onTap(int16_t x, int16_t y) {
       for (uint8_t i = 0; i < n; i++) {
         int bx, bw;
         cardFightRect(i, n, &bx, &bw);
-        if (x < bx || x > bx + bw) continue;
+        // die 6-px-Luecke gehoert zum linken Knopf - die ganze Flaeche startet
+        // einen Kampf, so wie vor der Teilung
+        int next = (i + 1 < n) ? bx + bw + 6 : 371;
+        if (x < bx || x >= next) continue;
         cardOpen = false;
         if (kinds[i] == BK_RIVAL) startRivalBattle();
         else if (kinds[i] == BK_ARENA) startArenaBattle();

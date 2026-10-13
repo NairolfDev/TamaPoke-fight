@@ -149,7 +149,13 @@ aus `build\battle\flash_args` (Bootloader 0x0, Partitionen 0x8000,
 
 In PowerShell **mit `.\` davor** — ohne führt PowerShell keine Datei aus dem
 aktuellen Ordner aus („is not recognized"). In `cmd` geht `flash.bat`, im
-Explorer ein Doppelklick; dann wartet das Fenster am Ende auf eine Taste.
+Explorer ein Doppelklick. Per Doppelklick und aus PowerShell wartet das
+Fenster am Ende auf eine Taste, aus einer offenen `cmd`-Konsole nicht.
+
+Der angezeigte Hash stammt aus `build\battle\version.h`. Die legt
+`tools\build.ps1` erst nach einem **erfolgreichen** Build dorthin — ein
+fehlgeschlagener Build kann den Hash also nicht mehr verfälschen. Fehlt die
+Datei, zeigt `flash.bat` „unbekannt" und fragt nach.
 
 **Nie das Vollabbild `merged.bin` ab `0x0` flashen.** Es ist 16 MB groß und
 enthält an der Stelle der NVS-Partition (0x9000–0xE000) nur `0xFF` — jeder

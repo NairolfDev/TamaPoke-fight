@@ -72,4 +72,10 @@ $FQBN = "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionSche
 # Deprecation-Warnung von SensorLib ab. Ob der Build klappt, sagt $LASTEXITCODE.
 $ErrorActionPreference = "Continue"
 arduino-cli compile --fqbn $FQBN --build-path (Join-Path $repo $BuildPath) $sketch
-exit $LASTEXITCODE
+$rc = $LASTEXITCODE
+# Erst nach einem erfolgreichen Build gehoert der Hash zum Binary in diesem
+# Ordner. flash.bat liest ihn dort - nie aus version.h im Repo, die schon vor
+# dem Compile geschrieben wird. Scheitert der Build, bleibt die Kopie des
+# letzten guten Builds liegen und passt weiter zu dessen Binary.
+if ($rc -eq 0) { Copy-Item $verFile (Join-Path $repo $BuildPath) -Force }
+exit $rc

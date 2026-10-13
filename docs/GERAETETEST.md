@@ -369,6 +369,8 @@ gleich breite Knöpfe. Größter Eckabstand weiter 173,8 px.
 2. Stufe offen → der linke Knopf zeigt `KAMPF BEREIT` mit Rahmen.
 3. `ARENA 8` → der Arena-Knopf verschwindet. Danach `ARENA 0`.
 4. Rivale für heute besiegt → der Rivalen-Knopf verschwindet bis morgen.
+   Ein Tipp genau in die schmale Lücke zwischen zwei Knöpfen startet den
+   linken Kampf — die ganze Fläche bleibt aktiv.
 
 **Rivalenkampf**
 5. `RIVAL 25` (Slot Pikachu, Tag frei) → Knopf `RIVALE`: Kampf gegen
@@ -408,6 +410,12 @@ Kampf. Das Pet bleibt unberührt.
    Kampf wieder auf dem Wert davor stehen.
 
 Ohne SD-Karte lädt kein Sprite; dann prüft `HEAP` nur den Heap.
+
+Während `HEAP` läuft, steht der Bildschirm still und reagiert nicht auf
+Touch — bei `HEAP 300` rund 300 SD-Ladevorgänge lang. Das ist kein Absturz.
+`PRUEFEN` statt `KEIN LECK` heißt nicht sofort Leck: wandern die Werte von
+Block zu Block weiter, ist es eins; bleiben sie nach einem einmaligen Sprung
+stehen, war es ein Puffer, der erst spät angelegt wurde.
 
 ---
 

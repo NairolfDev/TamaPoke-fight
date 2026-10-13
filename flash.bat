@@ -43,10 +43,13 @@ if not defined ESPTOOL (
   goto fail
 )
 
-rem Welcher Stand wird geflasht? version.h schreibt tools\build.ps1.
+rem Welcher Stand wird geflasht? tools\build.ps1 legt version.h nach einem
+rem ERFOLGREICHEN Build neben das Binary. Die version.h im Repo-Ordner taugt
+rem dafuer nicht: sie wird vor dem Compile geschrieben und stimmt nach einem
+rem fehlgeschlagenen Build nicht mehr mit dem Binary ueberein.
 set "HASH=unbekannt"
-if exist version.h (
-  for /f "tokens=3" %%H in ('findstr /c:"#define FW_GIT" version.h') do set "HASH=%%~H"
+if exist "%BUILD%\version.h" (
+  for /f "tokens=3" %%H in ('findstr /c:"#define FW_GIT" "%BUILD%\version.h"') do set "HASH=%%~H"
 )
 echo.
 echo Stand:   !HASH!
