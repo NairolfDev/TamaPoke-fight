@@ -63,6 +63,8 @@ enum StrId : uint8_t {
   S_EVO_Q, S_EVO_KEEP, S_FAR_Q, S_FAR_GO, S_FAR_STAY,
   S_CHOOSE_STARTER,  // titulo de la eleccion del inicial (primera vez)
   S_NO_SPRITES, S_LOAD_SPRITES,  // aviso cuando falta el sprite en la SD
+  // Einstellungen: alles zuruecksetzen, mit Warnung und 5 s Sperre
+  S_RESET_Q, S_RESET_W1, S_RESET_W2, S_RESET_W3, S_RESET_KEEP, S_RESET_GO,
   STR_COUNT
 };
 

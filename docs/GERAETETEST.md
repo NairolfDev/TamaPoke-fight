@@ -52,7 +52,8 @@ Fehlt der Spielstand oder stimmt der Hash nicht: **hier anhalten.**
 
 **7. Zum Schluss — verbraucht das Pokémon**
 25. A11 Schritte 5–7 — Snapshot bei Abschied, Freilassen, Weglaufen
-26. B3 — Starterauswahl, braucht `WIPE`
+26. A18 — alles zurücksetzen über die Einstellungen (**löscht das Pokémon**)
+27. B3 — Starterauswahl, kommt nach A18 von selbst
 
 ## Vor dem Anfangen
 
@@ -419,6 +420,32 @@ Touch — bei `HEAP 300` rund 300 SD-Ladevorgänge lang. Das ist kein Absturz.
 `PRUEFEN` statt `KEIN LECK` heißt nicht sofort Leck: wandern die Werte von
 Block zu Block weiter, ist es eins; bleiben sie nach einem einmaligen Sprung
 stehen, war es ein Puffer, der erst spät angelegt wurde.
+
+## A18. Alles zurücksetzen (Einstellungen)
+
+**Löscht das Pokémon wirklich.** Deshalb ganz am Ende.
+
+Einstellungen öffnen (auf dem Hauptschirm nach unten wischen). In der Zeile mit
+Ton und Sprache steht mittig ein roter Knopf `LOESCHEN`, (177,296)–(289,326).
+
+1. Antippen → Warnschirm: rot `ALLES LOESCHEN?`, darunter drei Zeilen, was
+   gelöscht wird, grau `Sprache und Ton bleiben.`, unten `NEIN` und ein
+   **grauer** Knopf `LOESCHEN 5`, der auf 4, 3, 2, 1 herunterzählt.
+2. Während er grau ist, antippen → nur der Ablehnungston, **nichts passiert**.
+3. Wischen in jede Richtung und 3 s langer Druck tun nichts.
+4. `NEIN` → zurück in den Einstellungen, alles wie vorher.
+5. Nochmal öffnen: der Countdown beginnt **wieder bei 5**.
+6. Nach 5 s ist der Knopf rot und heißt `LOESCHEN`. Vorher die Sprache auf
+   z. B. Englisch und den Ton aus stellen. Dann antippen → Neustart, die
+   Starterauswahl erscheint.
+7. Danach: Sprache ist noch Englisch, Ton noch aus. `STATS` zeigt ein frisches
+   Ei, `REG` einen leeren Pokédex, `RIVAL` den Startwert Glumanda, `ARENA`
+   Rang 0.
+8. Alle sechs Sprachen: der Warnschirm passt in den Kreis, kein Text
+   abgeschnitten (längste Zeile 336 px, größter Eckabstand 211,6 px).
+
+`WIPE` auf der Konsole läuft über denselben Weg und behält Sprache und Ton
+ebenfalls.
 
 ---
 

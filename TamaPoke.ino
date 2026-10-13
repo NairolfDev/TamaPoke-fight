@@ -80,6 +80,10 @@ char nameBuf[12] = "";
 uint8_t nameLen = 0;
 uint8_t cardPage = 0;         // 0 perfil, 1 stats+medallas
 bool clockOpen = false;       // pantalla de ajuste de hora (deslizar abajo)
+// Einstellungen -> alles zuruecksetzen. resetAt ist der Zeitpunkt, ab dem
+// die 5-s-Sperre des Loeschknopfs laeuft.
+bool resetOpen = false;
+uint32_t resetAt = 0;
 int clockH = 12, clockM = 0;  // hora en edicion
 
 // escena de bano: espuma sobre el bicho y limpieza al reventar
@@ -684,10 +688,8 @@ void handleSerial() {
     delay(100);
     ESP.restart();
   } else if (line == "WIPE") {
-    pet.factoryReset();     // borra NVS y reinicia -> partida nueva (eleccion de inicial)
     Serial.println("DONE");
-    delay(100);
-    ESP.restart();
+    wipeProgress();         // derselbe Weg wie der Knopf in den Einstellungen
   } else if (line == "REG") {
     Serial.printf("pokedex %u/151:", pet.registeredCount());
     for (int i = 1; i <= 151; i++)
@@ -811,7 +813,7 @@ void handleTouch() {
     // 4.2: steht ein Levelkampf an, ist das Band der Knopf, auf den die
     // Spieler zielen. Ein langer Druck genau dort darf nicht das Freilassen
     // anbieten - liegt der Start im Band, bleibt der Dialog aus.
-    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && millis() - tStart > 3000 &&
+    if (!holdFired && !swallowGesture && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !resetOpen && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !inLevelBand(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
@@ -838,6 +840,7 @@ void onSwipeV(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
   if (galleryOpen || kbOpen || battleOpen || learnOpen || pet.ceremony)
     return;
+  if (resetOpen) return;  // nur NEIN fuehrt zurueck
   if (clockOpen) { clockOpen = false; return; }
   if (cardOpen) {
     if (dir < 0) cardOpen = false;  // arriba cierra la ficha
@@ -854,7 +857,7 @@ void onSwipeV(int dir) {
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
   if (pet.awaitingStarter()) return;  // bloqueado durante la eleccion de inicial
-  if (kbOpen || clockOpen) return;
+  if (kbOpen || clockOpen || resetOpen) return;
   if (cardOpen) {  // dentro de la ficha: cambiar entre las 4 paginas
     int p = (int)cardPage + (dir > 0 ? -1 : 1);  // izquierda avanza
     cardPage = p < 0 ? 0 : (p > 3 ? 3 : p);
@@ -915,6 +918,10 @@ void onTap(int16_t x, int16_t y) {
   }
   if (kbOpen) {
     keyboardTap(x, y);
+    return;
+  }
+  if (resetOpen) {
+    resetTap(x, y);
     return;
   }
   if (clockOpen) {
@@ -1186,6 +1193,10 @@ void render() {
   }
   if (kbOpen) {
     renderKeyboard();
+    return;
+  }
+  if (resetOpen) {
+    renderReset();
     return;
   }
   if (clockOpen) {
@@ -1864,6 +1875,8 @@ void drawClockBtn(int x, int y, const char *l) {
 #define LANG_PILL_H 30
 #define LANG_PILL_X 336          // pildora de idioma (cicla los 6 al tocar)
 #define LANG_PILL_W 96
+#define RESET_PILL_X 177         // zwischen Ton (bis 130) und Sprache (ab 336)
+#define RESET_PILL_W 112
 static const char *const LANG_CODES[LANG_COUNT] = { "ES", "EN", "FR", "DE", "IT", "PT" };
 
 void renderClock() {
@@ -1901,7 +1914,17 @@ void renderClock() {
   gfx->setCursor(34 + (96 - (int)strlen(sl) * 12) / 2, LANG_PILL_Y + 8);
   gfx->print(sl);
 
-  // selector de idioma: una pildora que cicla los 6 idiomas al tocar
+  // Alles zuruecksetzen: roter Knopf mittig zwischen Ton und Sprache.
+  // Groesster Eckabstand (289,326): 108,7 px.
+  gfx->fillRoundRect(RESET_PILL_X, LANG_PILL_Y, RESET_PILL_W, LANG_PILL_H, 8,
+                     UI_BAR_BAD);
+  gfx->setTextColor(UI_BG_DAY);
+  gfx->setTextSize(2);
+  gfx->setCursor(RESET_PILL_X + (RESET_PILL_W - (int)strlen(T(S_RESET_GO)) * 12) / 2,
+                 LANG_PILL_Y + 8);
+  gfx->print(T(S_RESET_GO));
+
+  // Sprachwahl: eine Pille, die durch die sechs Sprachen schaltet
   gfx->fillRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_WHITE);
   gfx->drawRoundRect(LANG_PILL_X, LANG_PILL_Y, LANG_PILL_W, LANG_PILL_H, 8, UI_INK);
   char lp[10];
@@ -1945,6 +1968,13 @@ void clockTap(int16_t x, int16_t y) {
       if (audioEnabled()) sfxPlay(SFX_TAP);    // confirma al encender
       return;
     }
+    if (x >= RESET_PILL_X && x < RESET_PILL_X + RESET_PILL_W) {  // Warnschirm
+      clockOpen = false;
+      resetOpen = true;
+      resetAt = millis();
+      sfxPlay(SFX_TAP);
+      return;
+    }
     if (x >= LANG_PILL_X && x < LANG_PILL_X + LANG_PILL_W) {  // cicla idioma
       setLang((Lang)((gLang + 1) % LANG_COUNT));
       sfxPlay(SFX_TAP);
@@ -1952,6 +1982,91 @@ void clockTap(int16_t x, int16_t y) {
     }
   }
   if (y >= 340 && y <= 388 && x >= 133 && x <= 333) { applyClock(); return; }
+}
+
+// ---------- alles zuruecksetzen ----------
+//
+// Der Loeschknopf ist RESET_LOCK_MS lang grau und tut nichts - wer hier
+// landet, soll die Warnung erst lesen. Ein versehentlicher Doppeltipp darf
+// kein Pokemon kosten. Alle Elemente liegen im Radius 231: groesster
+// Eckabstand Titel (368,70) 211,6 px, Knoepfe (383,310) 168,6 px.
+#define RESET_LOCK_MS 5000UL
+#define RESET_BTN_Y 262
+#define RESET_BTN_H 48
+#define RESET_NO_X 83
+#define RESET_GO_X 243
+#define RESET_BTN_W 140
+
+void renderReset() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillCircle(CX, CY, 231, UI_BG_DAY);
+  gfx->setTextColor(UI_BAR_BAD);
+  gfx->setTextSize(3);
+  gfx->setCursor(CX - strlen(T(S_RESET_Q)) * 9, 70);
+  gfx->print(T(S_RESET_Q));
+
+  const StrId lines[] = { S_RESET_W1, S_RESET_W2, S_RESET_W3 };
+  gfx->setTextColor(UI_INK);
+  gfx->setTextSize(2);
+  for (uint8_t i = 0; i < 3; i++) {
+    gfx->setCursor(CX - strlen(T(lines[i])) * 6, 128 + i * 28);
+    gfx->print(T(lines[i]));
+  }
+  gfx->setTextColor(UI_TRACK);
+  gfx->setCursor(CX - strlen(T(S_RESET_KEEP)) * 6, 220);
+  gfx->print(T(S_RESET_KEEP));
+
+  // NEIN
+  gfx->fillRoundRect(RESET_NO_X, RESET_BTN_Y, RESET_BTN_W, RESET_BTN_H, 12, UI_WHITE);
+  gfx->drawRoundRect(RESET_NO_X, RESET_BTN_Y, RESET_BTN_W, RESET_BTN_H, 12, UI_INK);
+  gfx->setTextColor(UI_INK);
+  gfx->setCursor(RESET_NO_X + RESET_BTN_W / 2 - strlen(T(S_NO)) * 6, RESET_BTN_Y + 16);
+  gfx->print(T(S_NO));
+
+  // LOESCHEN: grau mit Countdown, erst nach der Sperre rot
+  uint32_t passed = millis() - resetAt;
+  bool armed = passed >= RESET_LOCK_MS;
+  char go[16];
+  if (armed) snprintf(go, sizeof(go), "%s", T(S_RESET_GO));
+  else snprintf(go, sizeof(go), "%s %u", T(S_RESET_GO),
+                (unsigned)((RESET_LOCK_MS - passed + 999) / 1000));
+  gfx->fillRoundRect(RESET_GO_X, RESET_BTN_Y, RESET_BTN_W, RESET_BTN_H, 12,
+                     armed ? UI_BAR_BAD : UI_TRACK);
+  gfx->setTextColor(armed ? UI_BG_DAY : 0x8410);
+  gfx->setCursor(RESET_GO_X + RESET_BTN_W / 2 - (int)strlen(go) * 6, RESET_BTN_Y + 16);
+  gfx->print(go);
+  gfx->flush();
+}
+
+void resetTap(int16_t x, int16_t y) {
+  if (y < RESET_BTN_Y || y > RESET_BTN_Y + RESET_BTN_H) return;
+  if (x >= RESET_NO_X && x <= RESET_NO_X + RESET_BTN_W) {
+    resetOpen = false;
+    clockOpen = true;  // zurueck in die Einstellungen
+    sfxPlay(SFX_TAP);
+    return;
+  }
+  if (x >= RESET_GO_X && x <= RESET_GO_X + RESET_BTN_W) {
+    if (millis() - resetAt < RESET_LOCK_MS) {  // noch gesperrt
+      sfxPlay(SFX_DENY);
+      return;
+    }
+    wipeProgress();
+  }
+}
+
+// Der einzige Weg, den Fortschritt zu loeschen - auch WIPE auf der Konsole
+// laeuft hier durch. Sprache und Ton sind Einstellungen, kein Fortschritt:
+// sie liegen im selben NVS-Bereich und werden nach dem Loeschen
+// zurueckgeschrieben. Danach Neustart in die Starterauswahl.
+void wipeProgress() {
+  Lang lang = gLang;
+  bool snd = audioEnabled();
+  pet.factoryReset();
+  setLang(lang);
+  audioSetEnabled(snd);
+  delay(100);
+  ESP.restart();
 }
 
 // llama + numero de racha arriba a la izquierda

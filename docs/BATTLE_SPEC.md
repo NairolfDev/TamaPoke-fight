@@ -808,5 +808,6 @@ und `fw=`), `LVL <n>`, `SPEC <dex>`, `BATTLE <dex>`, `BSIM <n> [lv]`,
 `BOND <n>`, `ENE <n>`, `FOE <dex> [shiny]`, `RIVAL`, `RIVAL <dex> [groll]`,
 `ARENA`, `ARENA <n>`, `HEAP <n>`, `REBOOT` (Neustart wie Strom aus, ohne
 vorher zu speichern), dazu die Pflegebefehle aus dem Original
-(`HATCH`, `SHINY`, `NICK`, `BYE`, `RUN`, `ABANDON`, `WIPE`, `TIME`, `RTCSET`,
+(`HATCH`, `SHINY`, `NICK`, `BYE`, `RUN`, `ABANDON`, `WIPE` — derselbe Weg wie
+der Knopf in den Einstellungen, behält Sprache und Ton —, `TIME`, `RTCSET`,
 `CAREDAY`, `REG`, `EGGS`, `GAL`, `BEEP`, `LS`, `PUT`).

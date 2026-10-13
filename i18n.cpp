@@ -33,6 +33,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolucionar?", "Mantener forma", "Despedirse?", "Despedirse", "Quedaros juntos",
     "Elige tu inicial",
     "Sin sprites", "Cargalos en la SD",
+    "BORRAR TODO?", "Pokemon, Pokedex, medallas,", "arena y rival se borran",
+    "para siempre.", "Idioma y sonido se quedan.", "BORRAR",
   },
   // ---------------- EN ----------------
   {
@@ -60,6 +62,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolve?", "Keep form", "Say goodbye?", "Goodbye", "Stay together",
     "Choose your starter",
     "No sprites", "Load them onto the SD",
+    "DELETE ALL?", "Pokemon, Pokedex, medals,", "gym and rival are deleted",
+    "forever.", "Language and sound stay.", "DELETE",
   },
   // ---------------- FR ----------------
   {
@@ -87,6 +91,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evoluer?", "Garder forme", "Dire adieu?", "Adieu", "Rester ensemble",
     "Choisis ton starter",
     "Pas de sprites", "Charge-les sur la SD",
+    "TOUT EFFACER?", "Pokemon, Pokedex, medailles,", "arene et rival seront",
+    "effaces pour toujours.", "Langue et son restent.", "EFFACER",
   },
   // ---------------- DE ----------------
   {
@@ -114,6 +120,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Entwickeln?", "Form behalten", "Abschied?", "Lebwohl", "Zusammen bleiben",
     "Waehle dein Starter",
     "Keine Sprites", "Auf die SD laden",
+    "ALLES LOESCHEN?", "Pokemon, Pokedex, Medaillen,", "Arena und Rivale werden",
+    "fuer immer geloescht.", "Sprache und Ton bleiben.", "LOESCHEN",
   },
   // ---------------- IT ----------------
   {
@@ -141,6 +149,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evolvere?", "Mantieni forma", "Salutare?", "Addio", "Restare insieme",
     "Scegli l'iniziale",
     "Senza sprite", "Caricali sulla SD",
+    "CANCELLA TUTTO?", "Pokemon, Pokedex, medaglie,", "palestra e rivale saranno",
+    "cancellati per sempre.", "Lingua e suono restano.", "CANCELLA",
   },
   // ---------------- PT ----------------
   {
@@ -168,6 +178,8 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "Evoluir?", "Manter forma", "Despedir?", "Adeus", "Ficar juntos",
     "Escolhe o inicial",
     "Sem sprites", "Carrega-os no SD",
+    "APAGAR TUDO?", "Pokemon, Pokedex, medalhas,", "ginasio e rival serao",
+    "apagados para sempre.", "Idioma e som ficam.", "APAGAR",
   },
 };
 
