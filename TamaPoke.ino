@@ -198,6 +198,10 @@ uint8_t dimStage = 0;        // 0 despierto, 1 atenuado (90s), 2 casi apagado (5
 // bleibt aktiv und weckt; der Aufwach-Tipp wird verschluckt.
 #define SLEEP_DARK_MS 10000UL
 bool sleepDark = false;
+// Energiesparmodus unter 25 % Akku (Hysterese bis 30 %, siehe batSaverNext):
+// niedrigere Helligkeit, frueher dunkel, 160 MHz statt 240, 5 statt 10 Bilder
+// pro Sekunde. Der Kampf bleibt bei 85 ms - dort zaehlt die Reaktion.
+bool gSaver = false;
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
@@ -359,7 +363,7 @@ void loop() {
   // ist unmerklich.
   if (sleepDark) {
     delay(30);
-  } else if (now - lastRender >= (uint32_t)(battleOpen ? 85 : 100)) {
+  } else if (now - lastRender >= (uint32_t)(battleOpen ? 85 : (gSaver ? 200 : 100))) {
     lastRender = now;
     render();
   }
@@ -371,10 +375,17 @@ void updateBrightness(uint32_t now) {
   if (pet.evolving() || pet.ceremony || pet.eating() || pet.showHeart()) {
     lastInteract = now;
   }
+  bool wasSaver = gSaver;
+  gSaver = batSaverNext(gSaver, batPercent(), usbPresent() || batCharging());
+  // einmal hinweisen beim Eintritt; im Schlaf nicht wecken
+  if (gSaver && !wasSaver && !pet.sleeping) sfxPlay(SFX_DENY);
+
   uint32_t idle = now - lastInteract;
-  dimStage = (idle > 300000) ? 2 : (idle > 90000) ? 1 : 0;
+  uint32_t t1 = gSaver ? 20000UL : 90000UL, t2 = gSaver ? 90000UL : 300000UL;
+  dimStage = (idle > t2) ? 2 : (idle > t1) ? 1 : 0;
   uint8_t target = pet.sleeping ? 25 : (usbPresent() ? 180 : 145);
-  if (dimStage == 1) target = pet.sleeping ? 10 : 60;
+  if (gSaver && !pet.sleeping) target = 70;
+  if (dimStage == 1) target = pet.sleeping ? 10 : (gSaver ? 30 : 60);
   else if (dimStage == 2) target = 8;
   // Schlaf: nach SLEEP_DARK_MS ganz aus. Ein Tipp setzt lastInteract und
   // damit idle zurueck - dann leuchtet es wieder mit der Schlafhelligkeit.
@@ -385,10 +396,11 @@ void updateBrightness(uint32_t now) {
   // APB-Takt (I2C, SPI, Touch) unveraendert bleibt. Beim Wecken laeuft die
   // Umschaltung noch vor dem naechsten Bild.
   static const uint32_t fullMhz = getCpuFrequencyMhz();
-  static bool lowCpu = false;
-  if (sleepDark != lowCpu) {
-    lowCpu = sleepDark;
-    setCpuFrequencyMhz(sleepDark ? 80 : fullMhz);
+  static uint32_t curMhz = fullMhz;
+  uint32_t wantMhz = sleepDark ? 80 : (gSaver ? 160 : fullMhz);
+  if (wantMhz != curMhz) {
+    curMhz = wantMhz;
+    setCpuFrequencyMhz(wantMhz);
   }
   static uint8_t current = 255;
   if (target != current) {
@@ -724,13 +736,13 @@ void handleSerial() {
     Serial.println();
     Serial.println("DONE");
   } else if (line == "HEALTH") {
-    Serial.printf("up=%lus heap=%u min=%u psram=%u sd=%d mon=%d fw=%s/%s cpu=%u dunkel=%d akku=%d%% h=%d\n",
+    Serial.printf("up=%lus heap=%u min=%u psram=%u sd=%d mon=%d fw=%s/%s cpu=%u dunkel=%d akku=%d%% h=%d spar=%d\n",
                   (unsigned long)(millis() / 1000), ESP.getFreeHeap(),
                   ESP.getMinFreeHeap(),
                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), sdReady,
                   pmd.loaded || mon.loaded, FW_VERSION, FW_GIT,
                   (unsigned)getCpuFrequencyMhz(), sleepDark, batPercent(),
-                  batHoursLeft());
+                  batHoursLeft(), gSaver);
     Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
@@ -1923,9 +1935,10 @@ void renderClock() {
     char bt[32];
     int hl = batHoursLeft();
     if (usbPresent() || batCharging()) snprintf(bt, sizeof(bt), T(S_BAT_CHARGE), bp);
+    else if (gSaver && (millis() / 3000) % 2 == 0) snprintf(bt, sizeof(bt), "%s", T(S_BAT_LOW));
     else if (hl < 0) snprintf(bt, sizeof(bt), T(S_BAT_LEARN), bp);
     else snprintf(bt, sizeof(bt), T(S_BAT_HOURS), bp, hl);
-    gfx->setTextColor(UI_INK);
+    gfx->setTextColor(gSaver ? UI_BAR_BAD : UI_INK);
     gfx->setTextSize(2);
     gfx->setCursor(CX - (int)strlen(bt) * 6, 78);
     gfx->print(bt);
@@ -3146,6 +3159,9 @@ const char *eggMsg() {
 const char *statusMsg() {
   if (pet.evolving()) return T(S_EVOLVING);
   if (bathUntil) return "Splish splash!";  // onomatopeya universal
+  // unter 25 %: abwechselnd "bitte aufladen" und die normale Zeile, damit
+  // Hunger und Co. sichtbar bleiben
+  if (gSaver && (millis() / 3000) % 2 == 0) return T(S_BAT_LOW);
   if (pet.sleeping) return "Zzz...";
   if (pet.eating()) return T(S_EATING);
   if (pet.showHeart()) return T(S_LIKES);

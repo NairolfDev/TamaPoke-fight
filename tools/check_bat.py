@@ -28,6 +28,16 @@ def hours_from_rate(pct, rate10):
     return min(99, pct * 10 // rate10)
 
 
+def saver_next(cur, pct, charging):
+    if pct < 0 or charging:
+        return False
+    if pct < 25:
+        return True
+    if pct >= 30:
+        return False
+    return cur            # 25..29: Zustand halten, kein Flackern
+
+
 def main():
     # 2 % in einer Stunde = 2,0 %/h = 20
     assert rate_blend(0, 2, 3600000) == 20
@@ -50,10 +60,25 @@ def main():
     # dropPct * 36e6 muss in uint32 passen (C rechnet mit uint32_t)
     assert 100 * 36000000 < 2 ** 32
 
+    # Energiesparmodus: unter 25 % an, ab 30 % aus, dazwischen halten
+    assert saver_next(False, 24, False) is True
+    assert saver_next(False, 25, False) is False, 'genau 25 % noch nicht'
+    assert saver_next(True, 25, False) is True, 'Hysterese: halten'
+    assert saver_next(True, 29, False) is True
+    assert saver_next(True, 30, False) is False
+    assert saver_next(True, 10, True) is False, 'Laden beendet ihn sofort'
+    assert saver_next(True, -1, False) is False, 'kein Akku'
+    # Kette 40 -> 20 -> 27 -> 31: ein, ein, aus
+    s = False
+    for pct, want in ((40, False), (24, True), (27, True), (31, False), (27, False)):
+        s = saver_next(s, pct, False)
+        assert s is want, (pct, s)
+
     # dieselben Konstanten wie im Header?
     for needle in ('36000000UL', '* 3 +', '/ 4', '60000', '* 10 / rate10', '99'):
         assert needle in HEADER, 'rtcbat.h: %r fehlt - Zwilling veraltet?' % needle
     assert re.search(r'dtMs == 0 \|\| dropPct == 0', HEADER)
+    assert 'pct < 25' in HEADER and 'pct >= 30' in HEADER, 'Schwellen im Header?'
     print('check_bat: OK')
 
 

@@ -36,6 +36,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "BORRAR TODO?", "Pokemon, Pokedex, medallas,", "arena y rival se borran",
     "para siempre.", "Idioma y sonido se quedan.", "BORRAR",
     "BATERIA %d%%  ~%d H", "BATERIA %d%%  ~-- H", "BATERIA %d%%  CARGANDO",
+    "POR FAVOR, CARGA",
   },
   // ---------------- EN ----------------
   {
@@ -66,6 +67,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "DELETE ALL?", "Pokemon, Pokedex, medals,", "gym and rival are deleted",
     "forever.", "Language and sound stay.", "DELETE",
     "BATTERY %d%%  ~%d H", "BATTERY %d%%  ~-- H", "BATTERY %d%%  CHARGING",
+    "PLEASE CHARGE",
   },
   // ---------------- FR ----------------
   {
@@ -96,6 +98,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "TOUT EFFACER?", "Pokemon, Pokedex, medailles,", "arene et rival seront",
     "effaces pour toujours.", "Langue et son restent.", "EFFACER",
     "BATTERIE %d%%  ~%d H", "BATTERIE %d%%  ~-- H", "BATTERIE %d%%  CHARGE",
+    "A RECHARGER SVP",
   },
   // ---------------- DE ----------------
   {
@@ -126,6 +129,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "ALLES LOESCHEN?", "Pokemon, Pokedex, Medaillen,", "Arena und Rivale werden",
     "fuer immer geloescht.", "Sprache und Ton bleiben.", "LOESCHEN",
     "AKKU %d%%  ~%d H", "AKKU %d%%  ~-- H", "AKKU %d%%  LAEDT",
+    "BITTE AUFLADEN",
   },
   // ---------------- IT ----------------
   {
@@ -156,6 +160,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "CANCELLA TUTTO?", "Pokemon, Pokedex, medaglie,", "palestra e rivale saranno",
     "cancellati per sempre.", "Lingua e suono restano.", "CANCELLA",
     "BATTERIA %d%%  ~%d H", "BATTERIA %d%%  ~-- H", "BATTERIA %d%%  IN CARICA",
+    "METTI IN CARICA",
   },
   // ---------------- PT ----------------
   {
@@ -186,6 +191,7 @@ static const char *const STRINGS[LANG_COUNT][STR_COUNT] = {
     "APAGAR TUDO?", "Pokemon, Pokedex, medalhas,", "ginasio e rival serao",
     "apagados para sempre.", "Idioma e som ficam.", "APAGAR",
     "BATERIA %d%%  ~%d H", "BATERIA %d%%  ~-- H", "BATERIA %d%%  A CARREGAR",
+    "POR FAVOR, CARREGA",
   },
 };
 

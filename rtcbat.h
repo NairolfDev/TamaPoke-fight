@@ -30,6 +30,15 @@ inline uint16_t batRateBlend(uint16_t old10, uint8_t dropPct, uint32_t dtMs) {
   if (r > 60000) r = 60000;
   return old10 ? (uint16_t)(((uint32_t)old10 * 3 + r) / 4) : (uint16_t)r;
 }
+// Energiesparmodus: unter 25 % ohne Ladegeraet an, erst ab 30 % wieder aus.
+// Dazwischen bleibt der Zustand - ein Prozent Rauschen darf ihn nicht flackern
+// lassen. Laden beendet ihn sofort.
+inline bool batSaverNext(bool cur, int pct, bool charging) {
+  if (pct < 0 || charging) return false;
+  if (pct < 25) return true;
+  if (pct >= 30) return false;
+  return cur;
+}
 inline int batHoursFromRate(int pct, uint16_t rate10) {
   if (pct < 0 || rate10 == 0) return -1;
   uint32_t hh = (uint32_t)pct * 10 / rate10;

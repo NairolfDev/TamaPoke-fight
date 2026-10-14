@@ -67,6 +67,7 @@ enum StrId : uint8_t {
   S_RESET_Q, S_RESET_W1, S_RESET_W2, S_RESET_W3, S_RESET_KEEP, S_RESET_GO,
   // Einstellungen: Akkustand mit geschaetzten Stunden
   S_BAT_HOURS, S_BAT_LEARN, S_BAT_CHARGE,
+  S_BAT_LOW,  // unter 25 %: bitte aufladen (Energiesparmodus)
   STR_COUNT
 };
 

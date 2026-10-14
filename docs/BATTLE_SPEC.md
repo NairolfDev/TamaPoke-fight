@@ -777,6 +777,11 @@ Alles hier ist bewusst so entschieden und jederzeit umkehrbar:
 13. **Kein Netzwerk, nur Gen 1.**
 14. **Flashen schont den Spielstand.** Nie das Vollabbild ab `0x0`; `flash.bat`
     schreibt die Teile aus `flash_args`, `tools/check_flash.py` prüft vorher.
+15. **Energiesparmodus unter 25 % Akku** (Entscheidung des Nutzers, 2026-10-14):
+    ohne Ladegerät Hinweis „bitte aufladen" im Wechsel mit der Statuszeile,
+    Helligkeit 70, Dimmen nach 20 s, 160 MHz, 5 Bilder pro Sekunde (Kampf
+    unverändert). Hysterese bis 30 %, Laden beendet ihn sofort.
+    `batSaverNext()` in `rtcbat.h`, nachgerechnet von `tools/check_bat.py`.
 
 ---
 

@@ -47,7 +47,7 @@ Fehlt der Spielstand oder stimmt der Hash nicht: **hier anhalten.**
 **6. Härtung**
 21. A17 — `HEAP 300`, drei Arenakämpfe hintereinander
 22. B7 — `BSIM`-Abnahme gegen den Simulator
-23. B8, Teil „Burn-in" und A19 — Dimmen, Schlaf-Dunkel, Aufweck-Tipp löst nichts aus
+23. B8, Teil „Burn-in", A19 und A20 — Dimmen, Schlaf-Dunkel, Energiesparmodus
 24. über Nacht: `HEALTH` morgens und abends, Uptime und Heap vergleichen
 
 **7. Zum Schluss — verbraucht das Pokémon**
@@ -459,6 +459,32 @@ Titel steht eine Zeile bei y 78.
     nach dem Zurücksetzen (A18), sie ist eine Eigenschaft des Akkus.
 14. Zeile liegt im Kreis: längster Text `BATTERIA 100%  IN CARICA` 288 px bei
     y 78–94, größter Eckabstand 211,6 px (19,4 px Luft). Alle sechs Sprachen ansehen.
+
+## A20. Energiesparmodus unter 25 % Akku
+
+Ohne Ladegerät unter **25 %**: Hinweis „bitte aufladen" und Sparmodus. Zurück
+erst ab **30 %** (Hysterese, damit ein Prozent Rauschen nicht flackert) oder
+sofort am Ladegerät.
+
+Der Akku lässt sich nicht auf Kommando leeren; zum Prüfen entweder abwarten,
+oder die Schwelle für einen Test in `rtcbat.h` (`pct < 25`, `pct >= 30`)
+kurzzeitig anheben und flashen — dann aber **nicht committen**.
+
+1. Beim Eintritt (ohne Schlaf) ein kurzer Ablehnungston, einmal.
+2. Hauptschirm: die Statuszeile bei y 90 **wechselt alle 3 s** zwischen
+   `BITTE AUFLADEN` (bzw. Sprache) und der normalen Zeile (Hunger usw.).
+   Beide müssen erscheinen — sonst bleibt ein Bedürfnis des Pokémon unsichtbar.
+3. Einstellungen: die Akkuzeile wechselt ebenso, in **Rot**: `BITTE AUFLADEN` /
+   `AKKU 22%  ~3 H`.
+4. Helligkeit deutlich niedriger (70 statt 145), nach **20 s** statt 90 s
+   gedimmt, nach 90 s fast aus. Berührung hebt es wie immer wieder an.
+5. Bewegung etwas ruckeliger (5 statt 10 Bilder pro Sekunde), im **Kampf nicht**
+   (85 ms bleiben).
+6. `HEALTH` → `spar=1 cpu=160`, im Schlaf-Dunkel `cpu=80`.
+7. USB anstecken → Sparmodus **sofort** aus, `spar=0 cpu=240`, Helligkeit zurück.
+8. Von 25 % bis 29 % ohne USB bleibt der Zustand, wie er war.
+9. Alle sechs Sprachen: der Text passt in den Kreis (längster `POR FAVOR,
+   CARREGA` 216 px, größter Eckabstand 188,9 px bei y 78–106).
 
 ## A18. Alles zurücksetzen (Einstellungen)
 
