@@ -13,6 +13,29 @@ int batPercent();                // 0-100, -1 si no hay bateria conectada
 bool batCharging();
 bool usbPresent();
 
+// Restlaufzeit. Die Kapazitaet des Akkus ist unbekannt und der AXP2101 hat
+// keinen Strommesser - die Entladerate wird deshalb aus dem Prozentverlauf
+// gelernt (0.1 %/h, gleitend gemittelt) und in einem eigenen NVS-Bereich
+// "tpbat" abgelegt, den ein Zuruecksetzen des Spielstands nicht loescht.
+// Jede Schleife aufrufen; quiet = Schirm dunkel oder Schlaf, nur dann wird
+// geschrieben (ein NVS-Schreiben friert beide Kerne ~1 s ein).
+void batEstimateTick(bool quiet);
+int batHoursLeft();              // Stunden, -1 = noch nicht gelernt
+
+// Reine Rechnung, ohne Hardware - tools/check_bat.py rechnet sie nach.
+inline uint16_t batRateBlend(uint16_t old10, uint8_t dropPct, uint32_t dtMs) {
+  if (dtMs == 0 || dropPct == 0) return old10;
+  uint32_t r = (uint32_t)dropPct * 36000000UL / dtMs;  // 0.1 %/h
+  if (r < 1) r = 1;
+  if (r > 60000) r = 60000;
+  return old10 ? (uint16_t)(((uint32_t)old10 * 3 + r) / 4) : (uint16_t)r;
+}
+inline int batHoursFromRate(int pct, uint16_t rate10) {
+  if (pct < 0 || rate10 == 0) return -1;
+  uint32_t hh = (uint32_t)pct * 10 / rate10;
+  return hh > 99 ? 99 : (int)hh;
+}
+
 // boton PWR del AXP2101: pulsacion larga 4s = apagado fisico (RTC sigue vivo);
 // la pulsacion corta la captura el firmware (pantalla on/off)
 void pwrSetup();

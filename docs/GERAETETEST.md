@@ -47,7 +47,7 @@ Fehlt der Spielstand oder stimmt der Hash nicht: **hier anhalten.**
 **6. Härtung**
 21. A17 — `HEAP 300`, drei Arenakämpfe hintereinander
 22. B7 — `BSIM`-Abnahme gegen den Simulator
-23. B8, Teil „Burn-in" — Dimmen, Aufweck-Tipp löst nichts aus
+23. B8, Teil „Burn-in" und A19 — Dimmen, Schlaf-Dunkel, Aufweck-Tipp löst nichts aus
 24. über Nacht: `HEALTH` morgens und abends, Uptime und Heap vergleichen
 
 **7. Zum Schluss — verbraucht das Pokémon**
@@ -421,6 +421,45 @@ Touch — bei `HEAP 300` rund 300 SD-Ladevorgänge lang. Das ist kein Absturz.
 Block zu Block weiter, ist es eins; bleiben sie nach einem einmaligen Sprung
 stehen, war es ein Puffer, der erst spät angelegt wurde.
 
+## A19. Schlaf: Display aus, Touch weckt, Akkuschätzung
+
+**Schlaf-Dunkel.** Schläft das Pokémon und niemand tippt 10 s lang, geht das
+Display ganz aus, es wird nichts mehr gezeichnet, und der Takt sinkt von 240
+auf 80 MHz. Touch bleibt aktiv.
+
+1. Licht-Icon antippen (oder `SCHLAF` auf der Konsole) → das Pokémon schläft,
+   Display auf Schlafhelligkeit.
+2. 10 s nichts tun → das Display ist **schwarz**.
+3. `HEALTH` (läuft dabei ohne den Bildschirm zu wecken) → `dunkel=1 cpu=80`.
+4. **Einmal tippen, irgendwo** → Display leuchtet mit Schlafhelligkeit,
+   `HEALTH` → `dunkel=0 cpu=240`. Der Tipp selbst löst **nichts** aus, auch
+   nicht auf einem Icon.
+5. Wieder 10 s ruhen → dunkel. Jetzt Licht-Icon auf dem geweckten Bildschirm
+   antippen → das Pokémon wacht auf, normale Helligkeit.
+6. Pokémon wach, nichts tun: Dimmen nach 90 s / 5 min wie bisher, **nie** ganz
+   dunkel (nur im Schlaf und mit PWR-Knopf).
+7. Aufwachen von selbst (z. B. nach Schlaf-Ende) → Display geht ohne Tipp an.
+8. Ton, Eiaufbruch, Evolution: laufen weiter. Beim Wecken kein Knacken oder
+   Aussetzer (Takt wird vor dem ersten Bild hochgesetzt).
+
+**Akkuschätzung.** Einstellungen öffnen (nach unten wischen): oben unter dem
+Titel steht eine Zeile bei y 78.
+
+9. Am USB: `AKKU 87%  LAEDT` (bzw. in der Sprache).
+10. Ohne USB, frisch: `AKKU 87%  ~-- H` — **noch nicht gelernt**. Die
+    Kapazität des Akkus ist unbekannt, und der AXP2101 hat keinen Strommesser;
+    das Gerät lernt die Rate aus dem Prozentverlauf. Dafür braucht es mindestens
+    **2 % Verlust in mindestens 10 Minuten** ohne USB.
+11. Nach ein paar Stunden Akku: `AKKU 80%  ~14 H`. `HEALTH` zeigt `akku=` und
+    `h=` ebenso.
+12. Die Zahl ist ein **Mittel über die zuletzt gemessene Nutzung**. Nach einer
+    langen Schlafnacht steigt sie, nach viel Kämpfen fällt sie. Das ist
+    gewollt und kein Fehler.
+13. Neustart (`REBOOT`) → die gelernte Rate bleibt (NVS-Bereich `tpbat`). Auch
+    nach dem Zurücksetzen (A18), sie ist eine Eigenschaft des Akkus.
+14. Zeile liegt im Kreis: längster Text `BATTERIA 100%  IN CARICA` 288 px bei
+    y 78–94, größter Eckabstand 211,6 px (19,4 px Luft). Alle sechs Sprachen ansehen.
+
 ## A18. Alles zurücksetzen (Einstellungen)
 
 **Löscht das Pokémon wirklich.** Deshalb ganz am Ende.
@@ -562,6 +601,7 @@ dürfen **kein einziges Byte** gewandert sein. Die Engine allokiert nichts.
   | Hinweisband | (113,106)–(353,134) | 174,7 bei (353,106) | 56,3 |
   | Kampfknöpfe Statuskarte S. 1 | (96,300)–(370,340) | 173,8 bei (370,340) | 57,2 |
   | Arenazeile S. 4 | (155,284)–(311,300) | 102,8 bei (311,300) | 128,2 |
+  | Akkuzeile Einstellungen (288 px) | (89,78)–(377,94) | 211,6 bei (377,78) | 19,4 |
 
   Zuerst die obersten zwei Zeilen ansehen — dort ist die Luft am knappsten.
 - `drawStreakBadge()` bei (26,16) → **299,9**, also 69 px **außerhalb**

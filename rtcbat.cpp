@@ -2,6 +2,7 @@
 #include "pin_config.h"  // define XPOWERS_CHIP_AXP2101
 #include <Wire.h>
 #include <time.h>
+#include <Preferences.h>
 #include <SensorPCF85063.hpp>
 #include <XPowersLib.h>
 
@@ -94,3 +95,45 @@ bool pwrShortPressed() {
   if (hit) pmu.clearIrqStatus();
   return hit;
 }
+
+// ---------- Restlaufzeit (gelernte Entladerate) ----------
+
+static uint16_t drain10 = 0;   // gelernte Entladung in 0.1 %/h, 0 = noch unbekannt
+static bool drainLoaded = false, drainDirty = false;
+static int winPct = -1;        // Fensterbeginn: Prozent und Zeit
+static uint32_t winMs = 0;
+
+void batEstimateTick(bool quiet) {
+  if (!drainLoaded) {
+    drainLoaded = true;
+    Preferences p;
+    p.begin("tpbat", false);   // false: legt den Bereich beim ersten Mal an
+    drain10 = p.getUShort("drain", 0);
+    p.end();
+  }
+  int pct = batPercent();
+  if (pct < 0 || usbPresent()) {
+    winPct = -1;               // laden oder kein Akku: Fenster verwerfen
+  } else {
+    uint32_t now = millis();
+    if (winPct < 0 || pct > winPct) {
+      winPct = pct;            // Anfang, oder der Stand stieg (Ladeende)
+      winMs = now;
+    } else if (winPct - pct >= 2 && now - winMs >= 600000UL) {
+      // mindestens 2 % und 10 Min: darunter ist es Rauschen der Anzeige
+      drain10 = batRateBlend(drain10, (uint8_t)(winPct - pct), now - winMs);
+      drainDirty = true;
+      winPct = pct;
+      winMs = now;
+    }
+  }
+  if (drainDirty && quiet) {
+    Preferences p;
+    p.begin("tpbat", false);
+    p.putUShort("drain", drain10);
+    p.end();
+    drainDirty = false;
+  }
+}
+
+int batHoursLeft() { return batHoursFromRate(batPercent(), drain10); }

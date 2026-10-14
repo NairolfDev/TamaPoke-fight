@@ -806,7 +806,7 @@ Rebranding. Die Upstream-Attribution in `CREDITS.md` bleibt bestehen.
 **Konsole** (115200 Baud, LF): `STATS` (mit `pech=`), `HEALTH` (mit `psram=`
 und `fw=`), `LVL <n>`, `SPEC <dex>`, `BATTLE <dex>`, `BSIM <n> [lv]`,
 `BOND <n>`, `ENE <n>`, `FOE <dex> [shiny]`, `RIVAL`, `RIVAL <dex> [groll]`,
-`ARENA`, `ARENA <n>`, `HEAP <n>`, `REBOOT` (Neustart wie Strom aus, ohne
+`ARENA`, `ARENA <n>`, `HEAP <n>`, `SCHLAF` (wie der Licht-Knopf), `REBOOT` (Neustart wie Strom aus, ohne
 vorher zu speichern), dazu die Pflegebefehle aus dem Original
 (`HATCH`, `SHINY`, `NICK`, `BYE`, `RUN`, `ABANDON`, `WIPE` — derselbe Weg wie
 der Knopf in den Einstellungen, behält Sprache und Ton —, `TIME`, `RTCSET`,

@@ -251,7 +251,7 @@ Die serielle Konsole (115200, Zeilenende LF) ist die Testbank. Kommandos:
 `ABANDON`, `WIPE`, `BEEP`, `REG`, `EGGS`, `GAL`, `CAREDAY`, `TIME`, `RTCSET`,
 `HEALTH`, `LS`, `PUT`, dazu für den Kampf `BATTLE <dex>`, `BSIM <n> [lv]`,
 `BOND <n>`, `ENE <n>`, `FOE <dex> [shiny]`, `RIVAL`, `RIVAL <dex> [groll]`,
-`ARENA`, `ARENA <n>`, `HEAP <n>`, `REBOOT`. Was jedes tut:
+`ARENA`, `ARENA <n>`, `HEAP <n>`, `REBOOT`, `SCHLAF`. Was jedes tut:
 `docs/BATTLE_SPEC.md` §13.
 
 **Den Port zu öffnen ist kein verlässlicher Reset.** Am Gerät gemessen: einmal

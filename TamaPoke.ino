@@ -194,6 +194,10 @@ uint32_t lastRender = 0;
 // proteccion del AMOLED: atenuado por inactividad
 uint32_t lastInteract = 0;
 uint8_t dimStage = 0;        // 0 despierto, 1 atenuado (90s), 2 casi apagado (5min)
+// Schlaf + 10 s ohne Tipp: Display aus, kein Rendern, Takt 80 MHz. Touch
+// bleibt aktiv und weckt; der Aufwach-Tipp wird verschluckt.
+#define SLEEP_DARK_MS 10000UL
+bool sleepDark = false;
 bool swallowGesture = false; // el toque que despierta no acciona nada
 uint32_t holdStart = 0;     // pulsacion larga sobre el bicho
 uint32_t confirmUntil = 0;  // dialogo "soltar?" activo hasta este millis
@@ -320,6 +324,7 @@ void loop() {
   }
 
   updateBrightness(now);
+  batEstimateTick(screenOff || dimStage >= 1 || pet.sleeping);
 
   // vuelca el autoguardado periodico SOLO con la pantalla atenuada/apagada o
   // durmiendo: la escritura a NVS congela ~1s ambos cores (caché de flash off),
@@ -349,7 +354,12 @@ void loop() {
   // 85 ms en juego/saco: margen seguro para que el redibujado no pise el envio
   // DMA del frame anterior (a 40-65 ms solapaba y causaba flashes negros; con
   // sprites grandes el dibujo tarda mas, asi que se deja colchon)
-  if (now - lastRender >= (uint32_t)(battleOpen ? 85 : 100)) {
+  // Dunkel wird nichts gezeichnet, und der Kern darf zwischen den Durchlaeufen
+  // schlafen (der Leerlauf-Task wartet per WFI). 30 ms Latenz fuer den Touch
+  // ist unmerklich.
+  if (sleepDark) {
+    delay(30);
+  } else if (now - lastRender >= (uint32_t)(battleOpen ? 85 : 100)) {
     lastRender = now;
     render();
   }
@@ -366,7 +376,20 @@ void updateBrightness(uint32_t now) {
   uint8_t target = pet.sleeping ? 25 : (usbPresent() ? 180 : 145);
   if (dimStage == 1) target = pet.sleeping ? 10 : 60;
   else if (dimStage == 2) target = 8;
-  if (screenOff) target = 0;
+  // Schlaf: nach SLEEP_DARK_MS ganz aus. Ein Tipp setzt lastInteract und
+  // damit idle zurueck - dann leuchtet es wieder mit der Schlafhelligkeit.
+  sleepDark = pet.sleeping && idle > SLEEP_DARK_MS && !pet.ceremony;
+  if (sleepDark || screenOff) target = 0;
+
+  // Dunkel braucht keine 240 MHz: 80 MHz ist der kleinste Takt, bei dem der
+  // APB-Takt (I2C, SPI, Touch) unveraendert bleibt. Beim Wecken laeuft die
+  // Umschaltung noch vor dem naechsten Bild.
+  static const uint32_t fullMhz = getCpuFrequencyMhz();
+  static bool lowCpu = false;
+  if (sleepDark != lowCpu) {
+    lowCpu = sleepDark;
+    setCpuFrequencyMhz(sleepDark ? 80 : fullMhz);
+  }
   static uint8_t current = 255;
   if (target != current) {
     current = target;
@@ -680,6 +703,10 @@ void handleSerial() {
   } else if (line == "ABANDON") {
     pet.dbgRunawayReady();  // fuerza el estado "lista para escaparse" (test del boton)
     Serial.println("DONE");
+  } else if (line == "SCHLAF") {
+    pet.toggleLight();  // wie der Licht-Knopf: schlafen / aufwachen
+    Serial.printf("schlaf=%d\n", pet.sleeping);
+    Serial.println("DONE");
   } else if (line == "REBOOT") {
     // Neustart wie "Strom aus": KEIN save() vorher - geprueft werden soll,
     // was in NVS steht. Den Port zu oeffnen ist kein verlaesslicher Reset
@@ -697,11 +724,13 @@ void handleSerial() {
     Serial.println();
     Serial.println("DONE");
   } else if (line == "HEALTH") {
-    Serial.printf("up=%lus heap=%u min=%u psram=%u sd=%d mon=%d fw=%s/%s\n",
+    Serial.printf("up=%lus heap=%u min=%u psram=%u sd=%d mon=%d fw=%s/%s cpu=%u dunkel=%d akku=%d%% h=%d\n",
                   (unsigned long)(millis() / 1000), ESP.getFreeHeap(),
                   ESP.getMinFreeHeap(),
                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), sdReady,
-                  pmd.loaded || mon.loaded, FW_VERSION, FW_GIT);
+                  pmd.loaded || mon.loaded, FW_VERSION, FW_GIT,
+                  (unsigned)getCpuFrequencyMhz(), sleepDark, batPercent(),
+                  batHoursLeft());
     Serial.println("DONE");
   } else if (line == "STATS") {
     Serial.printf("spec=%d nv=%u com=%u fel=%u ene=%u lim=%u desc=%u sd=%d mon=%d bat=%d usb=%d rtc=%u\n",
@@ -803,7 +832,7 @@ void handleTouch() {
     tY0 = tYl = y;
     tStart = millis();
     holdFired = false;
-    swallowGesture = (dimStage > 0) || screenOff;  // si estaba a oscuras, solo despierta
+    swallowGesture = (dimStage > 0) || screenOff || sleepDark;  // a oscuras: solo despierta
     screenOff = false;
     lastInteract = millis();
   } else if (pressed) {  // sigue apoyado
@@ -1886,6 +1915,21 @@ void renderClock() {
   gfx->setTextSize(3);
   gfx->setCursor(CX - strlen(T(S_SET_TIME)) * 9, 44);
   gfx->print(T(S_SET_TIME));
+
+  // Akku: Stand und geschaetzte Stunden. Zeile bei y 78..94, im Kreis bis
+  // 288 px Breite (laengster Text, IT/PT beim Laden).
+  int bp = batPercent();
+  if (bp >= 0) {
+    char bt[32];
+    int hl = batHoursLeft();
+    if (usbPresent() || batCharging()) snprintf(bt, sizeof(bt), T(S_BAT_CHARGE), bp);
+    else if (hl < 0) snprintf(bt, sizeof(bt), T(S_BAT_LEARN), bp);
+    else snprintf(bt, sizeof(bt), T(S_BAT_HOURS), bp, hl);
+    gfx->setTextColor(UI_INK);
+    gfx->setTextSize(2);
+    gfx->setCursor(CX - (int)strlen(bt) * 6, 78);
+    gfx->print(bt);
+  }
 
   char t[8];
   snprintf(t, sizeof(t), "%02d:%02d", clockH, clockM);

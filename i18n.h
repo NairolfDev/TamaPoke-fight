@@ -65,6 +65,8 @@ enum StrId : uint8_t {
   S_NO_SPRITES, S_LOAD_SPRITES,  // aviso cuando falta el sprite en la SD
   // Einstellungen: alles zuruecksetzen, mit Warnung und 5 s Sperre
   S_RESET_Q, S_RESET_W1, S_RESET_W2, S_RESET_W3, S_RESET_KEEP, S_RESET_GO,
+  // Einstellungen: Akkustand mit geschaetzten Stunden
+  S_BAT_HOURS, S_BAT_LEARN, S_BAT_CHARGE,
   STR_COUNT
 };
 
